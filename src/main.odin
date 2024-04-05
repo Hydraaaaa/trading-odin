@@ -14,96 +14,139 @@ START_ZOOM_INDEX :: 2
 ZOOM_THRESHOLD :: 3.0
 ZOOM_INCREMENT :: 1.05
 
+LABEL_PADDING :: 4
+
+// Will be 14 on the price/date bars
+FONT_SIZE :: 14
+
+//CandleTimeframe :: enum
+//{
+//	MINUTE,
+//	MINUTE_5,
+//	MINUTE_15,
+//	MINUTE_30,
+//	HOUR,
+//	HOUR_3,
+//	HOUR_6,
+//	HOUR_12,
+//	DAY,
+//	WEEK,
+//	MONTH,
+//	QTR,
+//	YEAR,
+//}
+CandleTimeframe :: enum
+{
+	MONTH,
+	WEEK,
+	DAY,
+	HOUR_4,
+	HOUR,
+}
+
+//CANDLE_TIMEFRAME_INCREMENTS : [10]i32 : {60, 300, 900, 1800, 3600, 10_800, 21_600, 43_200, 86_400, 604_800}
+CANDLE_TIMEFRAME_INCREMENTS : [5]i32 : {1_000_000, 604_800, 86_400, 14_400, 3600}
+
 main :: proc()
 {
 	using raylib
-
+	
 	SetConfigFlags({.WINDOW_RESIZABLE})
 
 	InitWindow(INITIAL_SCREEN_WIDTH, INITIAL_SCREEN_HEIGHT, "Trading")
 	defer CloseWindow()
+	
+	icon := LoadImage("icon.png")
+	defer UnloadImage(icon)
+
+	SetWindowIcon(icon)
 
 	screenWidth : i32 = INITIAL_SCREEN_WIDTH
 	screenHeight : i32 = INITIAL_SCREEN_HEIGHT
 
 	windowedScreenWidth : i32 = 0
 	windowedScreenHeight : i32 = 0
-	
-    SetTargetFPS(100)
+
+    SetTargetFPS(340)
 	fpsString : string
 
-	candleData : [ZOOM_INDEX_COUNT]CandleData
+	font := LoadFontEx("roboto-bold.ttf", FONT_SIZE, nil, 0)
 
-	LoadCandleData(&candleData[0], "1mo")
-	LoadCandleData(&candleData[1], "1w")
-	LoadCandleData(&candleData[2], "1d")
-	LoadCandleData(&candleData[3], "4h")
-	LoadCandleData(&candleData[4], "1h")
+	candles : [ZOOM_INDEX_COUNT][]Candle
+	candleTimestampOffsets : [ZOOM_INDEX_COUNT]i32
+	candleCloseLevels : [ZOOM_INDEX_COUNT]CandleCloseLevels
 
-	defer for i := 0; i < ZOOM_INDEX_COUNT; i += 1
+	candles[0] = LoadCandles("1mo")
+	candleTimestampOffsets[0] = candles[0][0].timestamp
+	candles[1] = LoadCandles("1w")
+	candleTimestampOffsets[1] = candles[1][0].timestamp
+	candles[2] = LoadCandles("1d")
+	candleTimestampOffsets[2] = candles[2][0].timestamp
+	candles[3] = LoadCandles("4h")
+	candleTimestampOffsets[3] = candles[3][0].timestamp
+	candles[4] = LoadCandles("1h")
+	candleTimestampOffsets[4] = candles[4][0].timestamp
+
+	defer for i in 0 ..< ZOOM_INDEX_COUNT
 	{
-		UnloadCandleData(&candleData[i])
+		UnloadCandles(candles[i])
 	}
 
-	CreateCloseLevels(&candleData[0], PURPLE)
-	CreateCloseLevels(&candleData[1], YELLOW)
-	CreateCloseLevels(&candleData[2], BLUE)
-	CreateCloseLevels(&candleData[3], ORANGE)
+	candleCloseLevels[0] = CreateCloseLevels(candles[0], PURPLE)
+	candleCloseLevels[1] = CreateCloseLevels(candles[1], YELLOW)
+	candleCloseLevels[2] = CreateCloseLevels(candles[2], BLUE)
+	candleCloseLevels[3] = CreateCloseLevels(candles[3], ORANGE)
 
-	defer for i := 0; i < 4; i += 1
+	showInvalidatedCloseLevels := false
+
+	defer for i in 0 ..< 4
 	{
-		DestroyCloseLevels(&candleData[i])
+		DestroyCloseLevels(candleCloseLevels[i])
 	}
 
 	scaleData : ScaleData
 
 	scaleData.zoom = 1
-	scaleData.horizontalScale = f32(candleData[START_ZOOM_INDEX].candles[0].scale) / (ZOOM_THRESHOLD * 2)
+	scaleData.horizontalScale = f64(candles[START_ZOOM_INDEX][0].scale) / (ZOOM_THRESHOLD * 2)
 	scaleData.logScale = true
 
-	cameraPosX : f32
-	cameraPosY : f32
+	cameraPosX : i32
+	cameraPosY : i32
 
 	zoomIndex := START_ZOOM_INDEX
 	zoomLevel := 0
 	verticalZoomLevel : f32 = 0
 
-	showInvalidatedLevels := false
-
 	dragging := false
 	rightDragging := false
+	rightDraggingPriceStart : f32
 
 	// Set initial camera X position to show the most recent candle on the right
 	{
-		candle : ^Candle = &candleData[zoomIndex].candles[candleData[zoomIndex].candleCount - 1]
+		candle : ^Candle = &candles[zoomIndex][len(candles[zoomIndex]) - 1]
 
-		cameraPosX = f32(candle.timestamp + candle.scale) / scaleData.horizontalScale - f32(INITIAL_SCREEN_WIDTH)
+		cameraPosX = i32(f64(candle.timestamp + candle.scale) / scaleData.horizontalScale - INITIAL_SCREEN_WIDTH + 70)
 	}
 
-	cameraTimestamp : i32 = i32(f32(cameraPosX) * scaleData.horizontalScale)
-	cameraEndTimestamp : i32 = i32(f32(cameraPosX + INITIAL_SCREEN_WIDTH) * scaleData.horizontalScale)
+	cameraTimestamp := i32(f64(cameraPosX) * scaleData.horizontalScale)
+	cameraEndTimestamp := i32(f64(cameraPosX + INITIAL_SCREEN_WIDTH) * scaleData.horizontalScale)
+	mouseTimestamp : i32
 
-	initialVerticalScale : f32
+	// Slice of all candles that currently fit within the width of the screen
+	visibleCandles : []Candle = GetVisibleCandles(candles[zoomIndex], CandleTimeframe(zoomIndex), candleTimestampOffsets[zoomIndex], cameraPosX, screenWidth, scaleData)
+	highestCandle : Candle = GetHighestCandle(visibleCandles)
+	lowestCandle : Candle = GetLowestCandle(visibleCandles)
+	candleUnderCursor : Candle
+
+	initialVerticalScale : f64
 
 	// Set initial vertical scale to fit all initially visible candles on screen
 	{
 		low : f32 = 10000000
 		high : f32 = 0
 
-		for i := 1; i < candleData[zoomIndex].candleCount; i += 1
+		for candle in visibleCandles
 		{
-			candle : ^Candle = &candleData[zoomIndex].candles[i]
-
-			if candle.timestamp > cameraEndTimestamp
-			{
-				break
-			}
-
-			if candle.timestamp + candle.scale < cameraTimestamp
-			{
-				continue
-			}
-
 			if candle.low < low
 			{
 				low = candle.low
@@ -117,13 +160,14 @@ main :: proc()
 
 		middle : f32 = (math.log10(high) + math.log10(low)) / 2
 
-		initialVerticalScale = (math.log10(high) - math.log10(low)) / (INITIAL_SCREEN_HEIGHT - 64)
+		initialVerticalScale = f64(math.log10(high) - math.log10(low)) / (INITIAL_SCREEN_HEIGHT - 64)
 
-		cameraPosY = -(middle / initialVerticalScale) - INITIAL_SCREEN_HEIGHT / 2
+		cameraPosY = i32(-(f64(middle) / initialVerticalScale) - INITIAL_SCREEN_HEIGHT / 2)
 	}
 
 	scaleData.verticalScale = initialVerticalScale
 
+	// UPDATE <><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
 	for !WindowShouldClose()
 	{
 		if IsWindowResized()
@@ -135,7 +179,6 @@ main :: proc()
 			{
 				newScreenWidth = GetMonitorWidth(0)
 				newScreenHeight = GetMonitorHeight(0)
-				fmt.println(newScreenWidth, newScreenHeight)
 			}
 			else
 			{
@@ -143,17 +186,17 @@ main :: proc()
 				newScreenHeight = GetScreenHeight()
 			}
 
-			cameraPosX -= f32(newScreenWidth - screenWidth)
+			cameraPosX -= newScreenWidth - screenWidth
 
-			cameraPrice := ToPrice(scaleData, cameraPosY + f32(screenHeight / 2))
+			cameraPrice : f32 = Price_FromPixelY(cameraPosY + screenHeight / 2, scaleData)
 
-			initialVerticalScale = initialVerticalScale * f32(screenHeight) / f32(newScreenHeight)
-			scaleData.verticalScale = scaleData.verticalScale * f32(screenHeight) / f32(newScreenHeight)
+			initialVerticalScale *= f64(screenHeight) / f64(newScreenHeight)
+			scaleData.verticalScale *= f64(screenHeight) / f64(newScreenHeight)
 
 			screenWidth = newScreenWidth
 			screenHeight = newScreenHeight
 
-			cameraPosY = ToPixelY(scaleData, cameraPrice) - f32(screenHeight / 2)
+			cameraPosY = Price_ToPixelY(cameraPrice, scaleData) - screenHeight / 2
 		}
 
 		if IsKeyPressed(.F11)
@@ -186,14 +229,15 @@ main :: proc()
 
 		if dragging
 		{
-			cameraPosX -= GetMouseDelta().x
-			cameraPosY -= GetMouseDelta().y
+			cameraPosX -= i32(GetMouseDelta().x)
+			cameraPosY -= i32(GetMouseDelta().y)
 		}
 
 		// Vertical Scale Adjustment
 		if IsMouseButtonPressed(.RIGHT)
 		{
 			rightDragging = true
+			rightDraggingPriceStart = Price_FromPixelY(cameraPosY + screenHeight / 2, scaleData)
 		}
 
 		if IsMouseButtonReleased(.RIGHT)
@@ -203,98 +247,94 @@ main :: proc()
 
 		if rightDragging
 		{
-			cameraCenterY : f32 = (cameraPosY + f32(screenHeight) / 2) * scaleData.verticalScale
-
 			verticalZoomLevel += GetMouseDelta().y
-			scaleData.verticalScale = initialVerticalScale * math.exp(verticalZoomLevel / 500)
+			scaleData.verticalScale = initialVerticalScale * math.exp(f64(verticalZoomLevel) / 500)
 
-			cameraPosY = cameraCenterY / scaleData.verticalScale - f32(screenHeight) / 2
+			cameraPosY = Price_ToPixelY(rightDraggingPriceStart, scaleData) - screenHeight / 2
 		}
 
-		// Debug zoom adjustment
-		if IsKeyPressed(.A)
+		// Update visibleCandles
+		cameraTimestamp = Timestamp_FromPixelX(cameraPosX, scaleData)
+		cameraEndTimestamp = Timestamp_FromPixelX(cameraPosX + screenWidth, scaleData)
+		visibleCandles = GetVisibleCandles(candles[zoomIndex], CandleTimeframe(zoomIndex), candleTimestampOffsets[zoomIndex], cameraPosX, screenWidth, scaleData)
+		highestCandle = GetHighestCandle(visibleCandles)
+		lowestCandle = GetLowestCandle(visibleCandles)
+
+		// If the last candle is before the start of the viewport
+		// Update candle under cursor
 		{
-			if zoomIndex < ZOOM_INDEX_COUNT - 1
+			// We add one pixel to the cursor's position, as all of the candles' timestamps get rounded down when converted
+			// As we are doing the opposite conversion, the mouse will always be less than or equal to the candles
+			timestamp : i32 = Timestamp_FromPixelX(GetMouseX() + cameraPosX + 1, scaleData)
+
+			if visibleCandles[len(visibleCandles) - 1].timestamp < timestamp
 			{
-				zoomIndex += 1
+				candleUnderCursor = visibleCandles[len(visibleCandles) - 1]
 			}
-		}
-
-		if IsKeyPressed(.S)
-		{
-			if zoomIndex > 0
+			else
 			{
-				zoomIndex -= 1
+				// NOTE: Potential for a binary search as a faster option
+				// This does not go out of range with the +1 as the above if already covers the case of the last candle
+				// There was a mysterious off-by-one issue when slicing off the last candle (len(visibleCandles) - 2), second last candle was never handled for some reason
+				for candle, i in visibleCandles[:]
+				{
+					if visibleCandles[i + 1].timestamp >= timestamp
+					{
+						candleUnderCursor = candle
+						break
+					}
+				}
 			}
 		}
 
 		if IsKeyPressed(.L)
 		{
-			cameraTop : f32 = ToPrice(scaleData, cameraPosY)
-			cameraBottom : f32 = ToPrice(scaleData, cameraPosY + f32(screenHeight))
-
-			cameraTimestamp : i32 = ToTimestamp(scaleData, cameraPosX)
-			cameraEndTimestamp : i32 = ToTimestamp(scaleData, cameraPosX + f32(screenWidth))
+			cameraTop : f32 = Price_FromPixelY(cameraPosY, scaleData)
+			cameraBottom : f32 = Price_FromPixelY(cameraPosY + screenHeight, scaleData)
 
 			priceUpper : f32 = 0
 			priceLower : f32 = 10000000
 
-			// Draw Candles
-			for i := 1; i < candleData[zoomIndex].candleCount; i += 1
+			// Rescale Candles
+			for candle in visibleCandles
 			{
-				candle : ^Candle = &candleData[zoomIndex].candles[i]
-
-				if candle.timestamp > cameraEndTimestamp
-				{
-					break
-				}
-
-				if candle.timestamp + candle.scale < cameraTimestamp
-				{
-					continue
-				}
-
 				if candle.high > priceUpper
 				{
-					if candle.high > cameraTop
-					{
-						priceUpper = cameraTop
-					}
-					else
-					{
-						priceUpper = candle.high
-					}
+					priceUpper = candle.high
 				}
 
 				if candle.low < priceLower
 				{
-					if candle.low < cameraBottom
-					{
-						priceLower = cameraBottom
-					}
-					else
-					{
-						priceLower = candle.low
-					}
+					priceLower = candle.low
 				}
 			}
+			
+			if priceUpper > cameraTop
+			{
+				priceUpper = cameraTop
+			}
 
-			prePixelUpper : f32 = ToPixelY(scaleData, priceUpper)
-			prePixelLower : f32 = ToPixelY(scaleData, priceLower)
+			if priceLower < cameraBottom
+			{
+				priceLower = cameraBottom
+			}
+			
+			prePixelUpper : f32 = Price_ToPixelY_f32(priceUpper, scaleData)
+			prePixelLower : f32 = Price_ToPixelY_f32(priceLower, scaleData)
 
-			pixelOffset : f32 = prePixelUpper - cameraPosY
+			pixelOffset : i32 = i32(prePixelUpper) - cameraPosY
 
 			scaleData.logScale = !scaleData.logScale
 
-			postPixelUpper : f32 = ToPixelY(scaleData, priceUpper)
-			postPixelLower : f32 = ToPixelY(scaleData, priceLower)
+			postPixelUpper : f32 = Price_ToPixelY_f32(priceUpper, scaleData)
+			postPixelLower : f32 = Price_ToPixelY_f32(priceLower, scaleData)
 
-			difference : f32 = f32(postPixelLower - postPixelUpper) / f32(prePixelLower - prePixelUpper)
+			difference : f64 = f64(postPixelLower - postPixelUpper) / f64(prePixelLower - prePixelUpper)
 			
 			initialVerticalScale *= difference
 			scaleData.verticalScale *= difference
-
-			cameraPosY = ToPixelY(scaleData, priceUpper) - pixelOffset
+			
+			cameraPosY = Price_ToPixelY(priceUpper, scaleData) - pixelOffset
 		}
 
 		// Zooming
@@ -303,8 +343,8 @@ main :: proc()
 			zoomLevel -= int(GetMouseWheelMove())
 
 			// Remove zoom from screen space as we adjust it
-			cameraCenterX : f32 = (cameraPosX + f32(screenWidth) / 2) * scaleData.zoom
-			cameraCenterY : f32 = (cameraPosY + f32(screenHeight) / 2) * scaleData.zoom
+			cameraCenterX : f64 = (f64(cameraPosX) + f64(screenWidth) / 2) * scaleData.zoom
+			cameraCenterY : f64 = (f64(cameraPosY) + f64(screenHeight) / 2) * scaleData.zoom
 
 			scaleData.zoom = 1
 
@@ -325,14 +365,14 @@ main :: proc()
 			zoomIndex = 0
 
 			for zoomIndex + 1 < ZOOM_INDEX_COUNT &&
-			    ToPixelX(scaleData, candleData[zoomIndex + 1].candles[0].scale) > ZOOM_THRESHOLD
+			    Timestamp_ToPixelX(candles[zoomIndex + 1][0].scale, scaleData) > ZOOM_THRESHOLD
 			{
 				zoomIndex += 1
 			}
 
 			// Re-add zoom post update
-			cameraPosX = cameraCenterX / scaleData.zoom - f32(screenWidth) / 2
-			cameraPosY = cameraCenterY / scaleData.zoom - f32(screenHeight) / 2
+			cameraPosX = i32(cameraCenterX / scaleData.zoom - f64(screenWidth) / 2)
+			cameraPosY = i32(cameraCenterY / scaleData.zoom - f64(screenHeight) / 2)
 		}
 
 		// Rendering <><><><><><><><><><><><><><><><><><><><><><><><><><><><>
@@ -340,31 +380,441 @@ main :: proc()
         BeginDrawing()
 
 		ClearBackground(BLACK)
+		
+		// Used for label bars
+		MIN_ALPHA :: 10
+		MAX_ALPHA :: 19
+		ALPHA_RANGE :: MAX_ALPHA - MIN_ALPHA
 
-		DrawRectangle(i32(-cameraPosX), 0, 1, i32(screenHeight), WHITE)
+		// Generate price labels
+		// Draw lines before candles are drawn
+		// Draw labels after candles are drawn
+		PriceLabel :: struct
+		{
+			price : f32,
+			text : string,
+			textBuffer : [32]u8, // Much larger buffer than timestamp labels, as log scale can balloon the prices, and memecoins, if ever implemented, use huge decimals
+			width : i32,
+			color : Color,
+		}
+		
+		// These are the only four linear scale increments, once these are exhausted, the values are multiplied by 10 and recycled
+		priceLabels : [dynamic]PriceLabel
+		reserve(&priceLabels, 32)
 
-		cameraTimestamp := ToTimestamp(scaleData, cameraPosX)
-		cameraEndTimestamp := ToTimestamp(scaleData, cameraPosX + f32(screenWidth))
+		labelHeight := i32(MeasureTextEx(font, "W\x00", FONT_SIZE, 0).y + LABEL_PADDING * 2)
+
+		priceLabelSpacing : i32 = labelHeight + 6
+
+		MINIMUM_DECIMAL :: 0.01
+
+		if scaleData.logScale
+		{
+			priceIncrements : [4]f32 = {1, 2.5, 5, 10}
+
+			topLabelPrice := Price_FromPixelY(cameraPosY - labelHeight / 2, scaleData)
+			priceDifference := Price_FromPixelY(cameraPosY - labelHeight / 2 - priceLabelSpacing, scaleData) - topLabelPrice
+			
+			currentMagnitude : f32 = 100_000_000
+			
+			for currentMagnitude > priceDifference
+			{
+				currentMagnitude *= 0.1
+			}
+
+			normalizedDifference := priceDifference / currentMagnitude
+
+			for i in 1 ..< len(priceIncrements)
+			{
+				if normalizedDifference < priceIncrements[i]
+				{
+					topLabelPrice = topLabelPrice - math.mod(topLabelPrice, priceIncrements[i] * currentMagnitude)
+					break
+				}
+			}
+
+			append(&priceLabels, PriceLabel{})
+			label := &priceLabels[len(priceLabels) - 1]
+			
+			label.price = topLabelPrice
+			label.text = fmt.bprintf(label.textBuffer[:], "%.2f\x00", label.price)
+			label.width = i32(MeasureTextEx(font, strings.unsafe_string_to_cstring(label.text), FONT_SIZE, 0).x) + LABEL_PADDING * 2
+			label.color = Color{255, 255, 255, MAX_ALPHA}
+			
+			prevPrice := topLabelPrice
+			prevPixel := Price_ToPixelY(prevPrice, scaleData)
+			
+			for prevPixel < cameraPosY + screenHeight
+			{
+				currentPrice := Price_FromPixelY(prevPixel + priceLabelSpacing, scaleData)
+				priceDifference = prevPrice - currentPrice
+				
+				for currentMagnitude > priceDifference
+				{
+					currentMagnitude *= 0.1
+				}
+				
+				normalizedDifference = priceDifference / currentMagnitude
+				
+				for i in 1 ..< len(priceIncrements)
+				{
+					if normalizedDifference < priceIncrements[i]
+					{
+						currentPrice = currentPrice - math.mod(currentPrice, priceIncrements[i] * currentMagnitude)
+						break
+					}
+				}
+
+				append(&priceLabels, PriceLabel{})
+				label := &priceLabels[len(priceLabels) - 1]
+				
+				label.price = currentPrice
+				label.text = fmt.bprintf(label.textBuffer[:], "%.2f\x00", label.price)
+				label.width = i32(MeasureTextEx(font, strings.unsafe_string_to_cstring(label.text), FONT_SIZE, 0).x) + LABEL_PADDING * 2
+				label.color = Color{255, 255, 255, MAX_ALPHA}
+				
+				prevPixel = Price_ToPixelY(currentPrice, scaleData)
+				prevPrice = currentPrice
+			}
+		}
+		else
+		{
+			priceIncrements : [4]f32 = {1, 2, 2.5, 5}
+		
+			// Linear scaling
+			// Do everything multiplied by the minimum decimal so that the minimum value is 1
+			// This way everything can be done in integers and we can avoid precision errors
+			
+			priceLabelSpacing = i32(f32(priceLabelSpacing) / MINIMUM_DECIMAL)
+
+			pixelPriceIncrement : f32 = abs(Price_ToPixelY_f32(1, scaleData) - Price_ToPixelY_f32(0, scaleData))
+			
+			// Will need to reference a minimum size value in the scenario of memecoins or alt pairs with BTC
+			priceIncrementMultiplier : i32 = 1
+			priceIncrementIndex := 0
+			
+			// Can we math this out?
+			for i32(pixelPriceIncrement * f32(priceIncrementMultiplier) * priceIncrements[len(priceIncrements) - 1]) < priceLabelSpacing
+			{
+				priceIncrementMultiplier *= 10				
+			}
+
+			for i32(pixelPriceIncrement * f32(priceIncrementMultiplier) * priceIncrements[priceIncrementIndex]) < priceLabelSpacing
+			{
+				priceIncrementIndex += 1
+			}
+			
+			priceIncrement := i32(f32(priceIncrementMultiplier) * priceIncrements[priceIncrementIndex])
+			
+			screenTopPrice := i32(Price_FromPixelY(cameraPosY, scaleData) / MINIMUM_DECIMAL)
+			screenBottomPrice := i32(Price_FromPixelY(cameraPosY + screenHeight, scaleData) / MINIMUM_DECIMAL)
+			
+			// Round to the nearest increment (which lies above the screen border)
+			currentPrice := screenTopPrice + priceIncrement - screenTopPrice % priceIncrement
+			lastPrice := i32(screenBottomPrice - priceIncrement)
+			
+			for currentPrice > lastPrice
+			{
+				append(&priceLabels, PriceLabel{})
+				label := &priceLabels[len(priceLabels) - 1]
+				
+				label.price = f32(currentPrice) / 100
+				label.text = fmt.bprintf(label.textBuffer[:], "%.2f\x00", label.price)
+				label.width = i32(MeasureTextEx(font, strings.unsafe_string_to_cstring(label.text), FONT_SIZE, 0).x) + LABEL_PADDING * 2
+				
+				significantIncrementTest := label.price / (f32(priceIncrementMultiplier) / 10)
+				
+				if significantIncrementTest == f32(i32(significantIncrementTest))
+				{
+					label.color = Color{255, 255, 255, MAX_ALPHA}
+				}
+				else
+				{
+					label.color = Color{255, 255, 255, MIN_ALPHA}
+				}
+				
+				currentPrice -= priceIncrement
+			}
+		}
+
+		// Draw Price Lines
+		for label in priceLabels
+		{
+			pixelY := Price_ToPixelY(label.price, scaleData) - cameraPosY
+
+			DrawRectangle(0, pixelY, screenWidth - label.width, 1, label.color)
+		}
+
+		// Generate timestamp labels
+		// Draw lines before candles are drawn
+		// Draw labels after candles are drawn
+		timeRange := cameraEndTimestamp - cameraTimestamp
+
+		pixelTimestampIncrement := Timestamp_FromPixelX(1, scaleData)
+		
+		TimestampLabel :: struct
+		{
+			timestamp : i32,
+			text : string,
+			textBuffer : [8]u8,
+			color : Color,
+		}
+		
+		timestampLabels : [dynamic]TimestampLabel
+		reserve(&timestampLabels, 32)
+		
+		DAY_TIMESTAMP :: 2880
+		DAY31_TIMESTAMP :: 75_000
+		
+		switch pixelTimestampIncrement
+		{
+			case 0 ..< DAY_TIMESTAMP: // Times + Days
+			{
+				INCREMENT_COUNT :: 9
+				incrementRequirements : [INCREMENT_COUNT]i32 = \
+				{ \
+					0, \
+					DAY_TIMESTAMP / 2880, \
+					DAY_TIMESTAMP / 576, \
+					DAY_TIMESTAMP / 192, \
+					DAY_TIMESTAMP / 96, \
+					DAY_TIMESTAMP / 48, \
+					DAY_TIMESTAMP / 16, \
+					DAY_TIMESTAMP / 8, \
+					DAY_TIMESTAMP / 4 \
+				}
+
+				increments : [INCREMENT_COUNT + 1]i32 = \
+				{ \
+					60, \
+					300, \
+					900, \
+					1800, \
+					3600, \
+					10_800, \
+					21_600, \
+					43_200, \
+					86_400, \
+					86_400 \
+				} // Extra 86_400 to conveniently handle [index + 1] query
+				
+				incrementIndex : int = INCREMENT_COUNT - 1
+				
+				for pixelTimestampIncrement < incrementRequirements[incrementIndex]
+				{
+					incrementIndex -= 1
+				}
+				
+				// Round the current timestamp
+				// As these are ints, the decimal value will be lost in the division, leading to a perfect increment
+				currentTimestamp := (cameraTimestamp / increments[incrementIndex]) * increments[incrementIndex]
+
+				prevTimestamp : i32 = 0
+		
+				for prevTimestamp < cameraEndTimestamp
+				{
+					append(&timestampLabels, TimestampLabel{})
+					
+					label := &timestampLabels[len(timestampLabels) - 1]
+					
+					label.color = WHITE
+					
+					currentDate := Timestamp_ToDayMonthYear(currentTimestamp)
+					
+					label.timestamp = currentTimestamp
+					
+					dayTimestamp := currentTimestamp % DAY
+					
+					// Setting label contents
+					if dayTimestamp == 0 // Days
+					{
+						if currentDate.day == 1 // Months
+						{
+							switch currentDate.month
+							{
+								case 2: label.text = fmt.bprintf(label.textBuffer[:], "Feb\x00")
+								case 3: label.text = fmt.bprintf(label.textBuffer[:], "Mar\x00")
+								case 4: label.text = fmt.bprintf(label.textBuffer[:], "Apr\x00")
+								case 5: label.text = fmt.bprintf(label.textBuffer[:], "May\x00")
+								case 6: label.text = fmt.bprintf(label.textBuffer[:], "Jun\x00")
+								case 7: label.text = fmt.bprintf(label.textBuffer[:], "Jul\x00")
+								case 8: label.text = fmt.bprintf(label.textBuffer[:], "Aug\x00")
+								case 9: label.text = fmt.bprintf(label.textBuffer[:], "Sep\x00")
+								case 10: label.text = fmt.bprintf(label.textBuffer[:], "Oct\x00")
+								case 11: label.text = fmt.bprintf(label.textBuffer[:], "Nov\x00")
+								case 12: label.text = fmt.bprintf(label.textBuffer[:], "Dec\x00")
+								case: label.text = fmt.bprintf(label.textBuffer[:], "%i\x00", currentDate.year)
+							}
+						}
+						else
+						{
+							label.text = fmt.bprintf(label.textBuffer[:], "%i\x00", currentDate.day)
+						}
+					}
+					else
+					{
+						hours   := dayTimestamp / 3600
+						minutes := dayTimestamp % 3600 / 60
+						label.text = fmt.bprintf(label.textBuffer[:], "%i:%2i", hours, minutes)
+					}
+					
+					// Fading out smaller increments
+					if incrementIndex == INCREMENT_COUNT - 1
+					{
+						if currentDate.day != 1
+						{
+							label.color.a = u8((1 - f32(pixelTimestampIncrement) / DAY_TIMESTAMP) * ALPHA_RANGE) + MIN_ALPHA
+						}
+						else
+						{
+							label.color.a = MAX_ALPHA
+						}
+					}
+					else // Fading out days in favour of months
+					{
+						if currentTimestamp % increments[incrementIndex + 1] != 0
+						{
+							if incrementRequirements[incrementIndex] != incrementRequirements[incrementIndex + 1]
+							{
+								label.color.a = u8((1 - (f32(pixelTimestampIncrement) - f32(incrementRequirements[incrementIndex])) / (f32(incrementRequirements[incrementIndex + 1]) - f32(incrementRequirements[incrementIndex]))) * ALPHA_RANGE) + MIN_ALPHA
+							}
+							else
+							{
+								label.color.a = MAX_ALPHA							
+							}
+						}
+						else
+						{
+							label.color.a = MAX_ALPHA
+						}
+					}
+
+					prevTimestamp = currentTimestamp
+
+					currentTimestamp += increments[incrementIndex]
+				}
+			}
+			case:
+			{
+				currentDate := Timestamp_ToDayMonthYear(cameraTimestamp)
+				currentDate.day = 1
+				
+				INCREMENT_COUNT :: 4
+
+				// Values for detemining how many months to increment for each label
+				incrementRequirements : [INCREMENT_COUNT]i32 = {0, DAY31_TIMESTAMP, DAY31_TIMESTAMP * 3, DAY31_TIMESTAMP * 6}
+				increments : [INCREMENT_COUNT + 1]int = {1, 3, 6, 12, 12} // Extra 12 to conveniently handle [index + 1] query
+				
+				incrementIndex : int = INCREMENT_COUNT - 1
+				
+				for pixelTimestampIncrement < incrementRequirements[incrementIndex]
+				{
+					incrementIndex -= 1
+				}
+
+				// Get each month within the current increment steps, but make sure that the increments are offset from January
+				// This ensures year numbers are included
+				monthOffset := currentDate.month % increments[incrementIndex]
+				
+				if monthOffset == 0
+				{
+					monthOffset = increments[incrementIndex]
+				}
+				
+				currentDate.month += 1 - monthOffset
+				
+				for currentDate.month < 1
+				{
+					currentDate.year -= 1
+					currentDate.month += 12
+				}
+				
+				prevTimestamp : i32 = 0
+				currentTimestamp := DayMonthYear_ToTimestamp(currentDate)
+		
+				for prevTimestamp < cameraEndTimestamp
+				{
+					append(&timestampLabels, TimestampLabel{})
+					
+					label := &timestampLabels[len(timestampLabels) - 1]
+					
+					label.color = WHITE
+					
+					if currentDate.month % increments[incrementIndex + 1] != 1
+					{
+						if incrementRequirements[incrementIndex] != incrementRequirements[incrementIndex + 1]
+						{
+							label.color.a = u8((1 - (f32(pixelTimestampIncrement) - f32(incrementRequirements[incrementIndex])) / (f32(incrementRequirements[incrementIndex + 1]) - f32(incrementRequirements[incrementIndex]))) * ALPHA_RANGE) + MIN_ALPHA
+						}
+						else
+						{
+							label.color.a = MAX_ALPHA							
+						}
+					}
+					else
+					{
+						label.color.a = MAX_ALPHA
+					}
+					
+					label.timestamp = currentTimestamp
+					
+					switch currentDate.month
+					{
+						case 2: label.text = fmt.bprintf(label.textBuffer[:], "Feb\x00")
+						case 3: label.text = fmt.bprintf(label.textBuffer[:], "Mar\x00")
+						case 4: label.text = fmt.bprintf(label.textBuffer[:], "Apr\x00")
+						case 5: label.text = fmt.bprintf(label.textBuffer[:], "May\x00")
+						case 6: label.text = fmt.bprintf(label.textBuffer[:], "Jun\x00")
+						case 7: label.text = fmt.bprintf(label.textBuffer[:], "Jul\x00")
+						case 8: label.text = fmt.bprintf(label.textBuffer[:], "Aug\x00")
+						case 9: label.text = fmt.bprintf(label.textBuffer[:], "Sep\x00")
+						case 10: label.text = fmt.bprintf(label.textBuffer[:], "Oct\x00")
+						case 11: label.text = fmt.bprintf(label.textBuffer[:], "Nov\x00")
+						case 12: label.text = fmt.bprintf(label.textBuffer[:], "Dec\x00")
+						case: label.text = fmt.bprintf(label.textBuffer[:], "%i\x00", currentDate.year)
+					}
+
+					prevTimestamp = currentTimestamp
+					currentDate.month += increments[incrementIndex]
+					
+					if currentDate.month > 12
+					{
+						currentDate.year += 1
+						currentDate.month -= 12
+					}
+					
+					currentTimestamp = DayMonthYear_ToTimestamp(currentDate)
+				}
+			}
+		}
+		
+		// Draw Time Axis Lines
+		timeAxisLineHeight := screenHeight - labelHeight 
+
+		for label in timestampLabels
+		{
+			pixelX := Timestamp_ToPixelX(label.timestamp, scaleData) - cameraPosX
+
+			DrawRectangle(pixelX, 0, 1, timeAxisLineHeight, label.color)
+		}
 
 		// Draw Candle Close Levels
-		for i := 0; i < zoomIndex; i += 1
+		for closeLevels in candleCloseLevels[:zoomIndex]
 		{
-			data : ^CandleData = &candleData[i]
-
-			for j := 0; j < data.closeLevelCount; j += 1
+			for closeLevel in closeLevels.closeLevels
 			{
-				pixelY := i32(ToPixelY(scaleData, data.closeLevels[j].price) - cameraPosY)
+				pixelY := i32(Price_ToPixelY(closeLevel.price, scaleData) - cameraPosY)
 
-				if (data.closeLevels[j].endTimestamp != -1)
+				if (closeLevel.endTimestamp != -1)
 				{
-					if (showInvalidatedLevels)
+					if (showInvalidatedCloseLevels)
 					{
-						DrawLine(i32(ToPixelX(scaleData, data.closeLevels[j].startTimestamp) - cameraPosX), pixelY, i32(ToPixelX(scaleData, data.closeLevels[j].endTimestamp) - cameraPosX), pixelY, data.closeLevelColor)
+						DrawLine(i32(Timestamp_ToPixelX(closeLevel.startTimestamp, scaleData) - cameraPosX), pixelY, i32(Timestamp_ToPixelX(closeLevel.endTimestamp, scaleData) - cameraPosX), pixelY, closeLevels.color)
 					}
 				}
 				else
 				{
-					DrawLine(i32(ToPixelX(scaleData, data.closeLevels[j].startTimestamp) - cameraPosX), pixelY, screenWidth, pixelY, data.closeLevelColor)
+					DrawLine(i32(Timestamp_ToPixelX(closeLevel.startTimestamp, scaleData) - cameraPosX), pixelY, screenWidth, pixelY, closeLevels.color)
 				}
 			}
 		}
@@ -374,29 +824,18 @@ main :: proc()
 
 		if zoomIndexHTF >= 0
 		{
-			for i : int = 0; i < candleData[zoomIndexHTF].candleCount; i += 1
+			visibleHTFCandles := GetVisibleCandles(candles[zoomIndexHTF], CandleTimeframe(zoomIndexHTF), candleTimestampOffsets[zoomIndexHTF], cameraPosX, screenWidth, scaleData)
+			for candle in visibleHTFCandles
 			{
-				candle : ^Candle = &candleData[zoomIndexHTF].candles[i]
+				xPos : i32 = Timestamp_ToPixelX(candle.timestamp, scaleData) - cameraPosX
+				candleWidth : i32 = Timestamp_ToPixelX(candle.scale, scaleData)
 
-				if candle.timestamp > cameraEndTimestamp
-				{
-					break
-				}
+				scaledOpen : i32 = Price_ToPixelY(candle.open, scaleData)
+				scaledClose : i32 = Price_ToPixelY(candle.close, scaleData)
+				scaledHigh : i32 = Price_ToPixelY(candle.high, scaleData)
+				scaledLow : i32 = Price_ToPixelY(candle.low, scaleData)
 
-				if candle.timestamp + candle.scale < cameraTimestamp
-				{
-					continue
-				}
-
-				xPos := ToPixelX(scaleData, candle.timestamp) - cameraPosX
-				candleWidth := ToPixelX(scaleData, candle.scale)
-
-				scaledOpen := ToPixelY(scaleData, candle.open)
-				scaledClose := ToPixelY(scaleData, candle.close)
-				scaledHigh := ToPixelY(scaleData, candle.high)
-				scaledLow := ToPixelY(scaleData, candle.low)
-
-				if scaledClose > scaledOpen
+				if scaledClose > scaledOpen // Red
 				{
 					candleHeight := scaledClose - scaledOpen
 
@@ -409,9 +848,9 @@ main :: proc()
 
 					color.a = 63
 
-					DrawRectangleLines(i32(xPos), i32(scaledOpen - cameraPosY), i32(candleWidth), i32(candleHeight), color)
+					DrawRectangleLines(xPos, scaledOpen - cameraPosY, candleWidth, candleHeight, color)
 				}
-				else
+				else // Green
 				{
 					candleHeight := scaledOpen - scaledClose
 
@@ -424,35 +863,23 @@ main :: proc()
 
 					color.a = 63
 
-					DrawRectangleLines(i32(xPos), i32(scaledClose - cameraPosY), i32(candleWidth), i32(candleHeight), color)
+					DrawRectangleLines(xPos, scaledClose - cameraPosY, candleWidth, candleHeight, color)
 				}
 			}
 		}
 
 		// Draw Candles
-		for i : int = 0; i < candleData[zoomIndex].candleCount; i += 1
+		for candle in visibleCandles
 		{
-			candle : ^Candle = &candleData[zoomIndex].candles[i]
+			xPos : i32 = Timestamp_ToPixelX(candle.timestamp, scaleData) - cameraPosX
+			candleWidth : i32 = Timestamp_ToPixelX(candle.scale, scaleData)
 
-			if candle.timestamp > cameraEndTimestamp
-			{
-				break
-			}
+			scaledOpen : i32 = Price_ToPixelY(candle.open, scaleData)
+			scaledClose : i32 = Price_ToPixelY(candle.close, scaleData)
+			scaledHigh : i32 = Price_ToPixelY(candle.high, scaleData)
+			scaledLow : i32 = Price_ToPixelY(candle.low, scaleData)
 
-			if candle.timestamp + candle.scale < cameraTimestamp
-			{
-				continue
-			}
-
-			xPos := ToPixelX(scaleData, candle.timestamp) - cameraPosX
-			candleWidth := ToPixelX(scaleData, candle.scale)
-
-			scaledOpen := ToPixelY(scaleData, candle.open)
-			scaledClose := ToPixelY(scaleData, candle.close)
-			scaledHigh := ToPixelY(scaleData, candle.high)
-			scaledLow := ToPixelY(scaleData, candle.low)
-
-			if scaledClose > scaledOpen
+			if scaledClose > scaledOpen // Red
 			{
 				candleHeight := scaledClose - scaledOpen
 
@@ -461,10 +888,10 @@ main :: proc()
 					candleHeight = 1
 				}
 
-				DrawRectangle(i32(xPos), i32(scaledOpen - cameraPosY), i32(candleWidth), i32(candleHeight), RED)
-				DrawRectangle(i32(xPos + candleWidth / 2 - 0.5), i32(scaledHigh - cameraPosY), 1, i32(scaledLow - scaledHigh), RED)
+				DrawRectangle(xPos, scaledOpen - cameraPosY, candleWidth, candleHeight, RED) // Body
+				DrawRectangle(xPos + i32(f32(candleWidth) / 2 - 0.5), scaledHigh - cameraPosY, 1, scaledLow - scaledHigh, RED) // Wick
 			}
-			else
+			else // Green
 			{
 				candleHeight := scaledOpen - scaledClose
 
@@ -473,44 +900,271 @@ main :: proc()
 					candleHeight = 1
 				}
 
-				DrawRectangle(i32(xPos), i32(scaledClose - cameraPosY), i32(candleWidth), i32(candleHeight), GREEN)
-				DrawRectangle(i32(xPos + candleWidth / 2 - 0.5), i32(scaledHigh - cameraPosY), 1, i32(scaledLow - scaledHigh), GREEN)
+				DrawRectangle(xPos, scaledClose - cameraPosY, candleWidth, candleHeight, GREEN) // Body
+				DrawRectangle(xPos + i32(f32(candleWidth) / 2 - 0.5), scaledHigh - cameraPosY, 1, scaledLow - scaledHigh, GREEN) // Wick
 			}
 		}
 
-		text : [64]u8
+		mouseY := GetMouseY();
 
-		output : string = fmt.bprintf(text[:], "%i\x00", GetFPS())
-		DrawText(strings.unsafe_string_to_cstring(output), 0, 0, 20, RAYWHITE)
+		crosshairColor := WHITE
+		crosshairColor.a = 127
 
-		output = fmt.bprintf(text[:], "%i\x00", zoomIndex)
-		DrawText(strings.unsafe_string_to_cstring(output), 0, 20, 20, RAYWHITE)
-
-		timestamp := ToTimestamp(scaleData, f32(GetMouseX()) + cameraPosX)
-
-		index := 0
-
-		for i := 1; i < candleData[zoomIndex].candleCount; i += 1
+		// Draw Crosshair
+		for i : i32 = 0; i < screenWidth; i += 2
 		{
-			if candleData[zoomIndex].candles[i].timestamp < timestamp
-			{
-				index += 1
-			}
-			else
-			{
-				break
-			}
+			DrawPixel(i, GetMouseY(), crosshairColor)
+		}
+
+		xPos : i32 = Timestamp_ToPixelX(candleUnderCursor.timestamp, scaleData) - cameraPosX
+		candleWidth : i32 = Timestamp_ToPixelX(candleUnderCursor.scale, scaleData)
+
+		for i : i32 = 0; i < screenHeight; i += 2
+		{
+			DrawPixel(xPos + i32(f32(candleWidth) / 2 - 0.5), i, crosshairColor)
+		}
+
+		text : [64]u8 = ---
+		output : string = ---
+
+		textRect : Vector2 = ---
+		candleCenterOffset : f32 = ---
+		labelPosX : f32 = ---
+		labelPosY : f32 = ---
+
+		// Highest Candle
+		output = fmt.bprintf(text[:], "%.2f\x00", highestCandle.high)
+		textRect = MeasureTextEx(font, strings.unsafe_string_to_cstring(output), FONT_SIZE, 0)
+		labelPosX = f32(Timestamp_ToPixelX(highestCandle.timestamp, scaleData) - cameraPosX) - textRect.x / 2 + candleCenterOffset
+		labelPosY = f32(Price_ToPixelY(highestCandle.high, scaleData) - cameraPosY) - textRect.y - LABEL_PADDING
+
+		if labelPosX < 2
+		{
+			labelPosX = 2
+		}
+
+		if labelPosX > f32(screenWidth) - textRect.x - 2 
+		{
+			labelPosX = f32(screenWidth) - textRect.x - 2
+		}
+
+		candleCenterOffset = f32(Timestamp_ToPixelX(highestCandle.scale, scaleData)) / 2 - 0.5
+		DrawTextEx(font, strings.unsafe_string_to_cstring(output), {labelPosX, labelPosY}, FONT_SIZE, 0, WHITE)
+
+		// Lowest Candle
+		output = fmt.bprintf(text[:], "%.2f\x00", lowestCandle.low)
+		textRect = MeasureTextEx(font, strings.unsafe_string_to_cstring(output), FONT_SIZE, 0)
+		labelPosX = f32(Timestamp_ToPixelX(lowestCandle.timestamp, scaleData) - cameraPosX) - textRect.x / 2 + candleCenterOffset
+		labelPosY = f32(Price_ToPixelY(lowestCandle.low, scaleData) - cameraPosY) + LABEL_PADDING
+
+		if labelPosX < 2
+		{
+			labelPosX = 2
+		}
+
+		if labelPosX > f32(screenWidth) - textRect.x - 2 
+		{
+			labelPosX = f32(screenWidth) - textRect.x - 2
+		}
+
+		candleCenterOffset = f32(Timestamp_ToPixelX(lowestCandle.scale, scaleData)) / 2 - 0.5
+		DrawTextEx(font, strings.unsafe_string_to_cstring(output), {labelPosX, labelPosY}, FONT_SIZE, 0, WHITE)
+
+		// FPS
+		output = fmt.bprintf(text[:], "%i\x00", GetFPS())
+		DrawTextEx(font, strings.unsafe_string_to_cstring(output), {0, 0}, FONT_SIZE, 0, WHITE)
+
+		// Zoom Index
+		output = fmt.bprintf(text[:], "%i\x00", zoomIndex)
+		DrawTextEx(font, strings.unsafe_string_to_cstring(output), {0, FONT_SIZE}, FONT_SIZE, 0, WHITE)
+
+		// Current Candle Price
+		output = fmt.bprintf(text[:], "%.2f\x00", candleUnderCursor.open)
+		DrawTextEx(font, strings.unsafe_string_to_cstring(output), {0, FONT_SIZE * 2}, FONT_SIZE, 0, WHITE)
+
+		labelBackground := BLACK
+		labelBackground.a = 127
+
+		// Draw Price Labels
+		for label, i in priceLabels
+		{
+			pixelY := Price_ToPixelY(label.price, scaleData) - cameraPosY
+			
+			labelPosX = f32(screenWidth) - f32(label.width)
+			labelPosY = f32(pixelY) - f32(labelHeight) / 2
+			
+			DrawRectangleRounded({labelPosX, labelPosY, f32(label.width), f32(labelHeight)}, 0.5, 10, labelBackground)
+			DrawTextEx(font, strings.unsafe_string_to_cstring(label.text), {labelPosX + LABEL_PADDING, labelPosY + LABEL_PADDING}, FONT_SIZE, 0, WHITE)
 		}
 		
-		output = fmt.bprintf(text[:], "%i: %f, %f\x00", index, candleData[zoomIndex].candles[index].open, ToPixelY(scaleData, candleData[zoomIndex].candles[index].open) - cameraPosY)
-		DrawText(strings.unsafe_string_to_cstring(output), 0, 40, 20, RAYWHITE)
-
-		output = fmt.bprintf(text[:], "%f, %f\x00", cameraPosX, cameraPosY)
-		DrawText(strings.unsafe_string_to_cstring(output), 0, 60, 20, RAYWHITE)
-
-		output = fmt.bprintf(text[:], "%i, %i\x00", screenWidth, screenHeight)
-		DrawText(strings.unsafe_string_to_cstring(output), 0, 80, 20, RAYWHITE)
+		// Draw Timestamp Labels
+		for label, i in timestampLabels
+		{
+			pixelX := Timestamp_ToPixelX(label.timestamp, scaleData) - cameraPosX
+			
+			labelWidth := MeasureTextEx(font, strings.unsafe_string_to_cstring(label.text), FONT_SIZE, 0).x
+			labelPosX = f32(pixelX) - labelWidth / 2
+			labelPosY = f32(screenHeight) - f32(labelHeight)
+			
+			labelColor := label.color
+			labelColor.a = 255
+			
+			DrawRectangleRounded({labelPosX - LABEL_PADDING, labelPosY - LABEL_PADDING, labelWidth + LABEL_PADDING * 2, labelWidth + LABEL_PADDING * 2}, 0.5, 10, labelBackground)
+			DrawTextEx(font, strings.unsafe_string_to_cstring(label.text), {labelPosX, labelPosY}, FONT_SIZE, 0, labelColor)
+		}
+		
+		clear(&timestampLabels)
 
         EndDrawing()
 	}
+}
+
+GetVisibleCandles :: proc(candles : []Candle, candleTimeframe : CandleTimeframe, timestampOffset : i32, cameraPosX : i32, screenWidth : i32, scaleData : ScaleData) -> []Candle
+{
+	candleTimeframeIncrements := CANDLE_TIMEFRAME_INCREMENTS
+
+	cameraEndTimestamp := Timestamp_FromPixelX(cameraPosX + screenWidth, scaleData)
+
+	if timestampOffset > cameraEndTimestamp
+	{
+		// Camera is further left than the leftmost candle
+		return nil
+	}
+
+	cameraTimestamp := Timestamp_FromPixelX(cameraPosX + 1, scaleData) - timestampOffset
+	cameraEndTimestamp -= timestampOffset
+
+	lastCandleIndex := i32(len(candles)) - 1
+	
+	// Everything below months is uniform, and can be mathed
+	if candleTimeframe != CandleTimeframe.MONTH
+	{
+		increment := candleTimeframeIncrements[int(candleTimeframe)]
+
+		if i32(len(candles)) * increment < cameraTimestamp
+		{
+			// Camera is further right than the rightmost candle
+			return nil
+		}
+
+		startIndex := cameraTimestamp / increment
+		endIndex := cameraEndTimestamp / increment + 1
+		
+		if startIndex < 0
+		{
+			startIndex = 0
+		}
+		else if startIndex > lastCandleIndex
+		{
+			startIndex = lastCandleIndex
+		}
+
+		if endIndex < 0
+		{
+			endIndex = 0
+		}
+		else if endIndex > lastCandleIndex
+		{
+			endIndex = lastCandleIndex
+		}
+		
+		return candles[startIndex:endIndex]
+	}
+
+	// The number of days between 2010 and each month leading up to December 2014
+	monthlyIncrements : [48]i32 = \
+	{ \
+		DAY * 31, DAY * 59, DAY * 90, DAY * 120, DAY * 151, DAY * 181, DAY * 212, DAY * 243, DAY * 273, DAY * 304, DAY * 334, DAY * 365, \
+		DAY * 396, DAY * 424, DAY * 455, DAY * 485, DAY * 516, DAY * 546, DAY * 577, DAY * 608, DAY * 638, DAY * 669, DAY * 699, DAY * 730, \
+		DAY * 761, DAY * 790, DAY * 821, DAY * 851, DAY * 882, DAY * 912, DAY * 943, DAY * 974, DAY * 1004, DAY * 1035, DAY * 1065, DAY * 1096, \
+		DAY * 1127, DAY * 1155, DAY * 1186, DAY * 1216, DAY * 1247, DAY * 1277, DAY * 1308, DAY * 1339, DAY * 1369, DAY * 1400, DAY * 1430, DAY * 1461 \
+	}
+	
+	cameraCandleIndex := cameraTimestamp / monthlyIncrements[47] * 48
+	remainingCameraTimestamp := cameraTimestamp % monthlyIncrements[47]
+	
+	searchIndex : i32 = 0
+	
+	for remainingCameraTimestamp > monthlyIncrements[searchIndex]
+	{
+		searchIndex += 1
+	}
+	
+	cameraCandleIndex += searchIndex
+
+	if i32(len(candles)) <= cameraCandleIndex
+	{
+		// Camera is further right than the rightmost candle
+		return nil
+	}
+
+	cameraEndCandleIndex := cameraEndTimestamp / monthlyIncrements[47] * 48
+	remainingCameraEndTimestamp := cameraEndTimestamp % monthlyIncrements[47]
+	
+	searchIndex = 0
+
+	for remainingCameraEndTimestamp > monthlyIncrements[searchIndex]
+	{
+		searchIndex += 1
+	}
+	
+	cameraEndCandleIndex += searchIndex + 1
+
+	if cameraCandleIndex < 0
+	{
+		cameraCandleIndex = 0
+	}
+	else if cameraCandleIndex > lastCandleIndex
+	{
+		cameraCandleIndex = lastCandleIndex		
+	}
+	
+	if cameraEndCandleIndex < 0
+	{
+		cameraEndCandleIndex = 0
+	}
+	else if cameraEndCandleIndex > lastCandleIndex
+	{
+		cameraEndCandleIndex = lastCandleIndex		
+	}
+
+	return candles[cameraCandleIndex:cameraEndCandleIndex]
+}
+
+GetHighestCandle :: proc(candles : []Candle) -> Candle
+{
+	if len(candles) == 0
+	{
+		return {}
+	}
+
+	highestCandle := candles[0]
+	for candle in candles[1:]
+	{
+		if candle.high > highestCandle.high
+		{
+			highestCandle = candle
+		}
+	}
+
+	return highestCandle
+}
+
+GetLowestCandle :: proc(candles : []Candle) -> Candle
+{
+	if len(candles) == 0
+	{
+		return {}
+	}
+
+	lowestCandle := candles[0]
+	for candle in candles[1:]
+	{
+		if candle.low < lowestCandle.low
+		{
+			lowestCandle = candle
+		}
+	}
+
+	return lowestCandle
 }

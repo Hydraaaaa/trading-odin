@@ -6,7 +6,9 @@ import "core:os"
 import "core:strconv"
 import "vendor:raylib"
 
-ORIGIN_TIMESTAMP : u64 : 1_501_545_600
+// 00:00:00
+// 1 August 2017
+BINANCE_ORIGIN_TIMESTAMP :: 1_501_545_600
 
 Candle :: struct
 {
@@ -25,18 +27,16 @@ CandleCloseLevel :: struct
 	price : f32,
 }
 
-CandleData :: struct
+CandleCloseLevels :: struct
 {
-	candles : []Candle,
-	candleCount : int,
 	closeLevels : []CandleCloseLevel,
 	closeLevelCount : int,
 
-	closeLevelColor : raylib.Color,
+	color : raylib.Color,
 }
 
 
-LoadCandleData :: proc(candleData : ^CandleData, fileName : string)
+LoadCandles :: proc(fileName : string) -> []Candle
 {
 	data, ok := os.read_entire_file(fileName, context.allocator)
 
@@ -44,7 +44,7 @@ LoadCandleData :: proc(candleData : ^CandleData, fileName : string)
 	{
 		// could not read file
 		fmt.println("Opening file failed!")
-		return
+		return nil
 	}
 
 	defer delete(data, context.allocator)
@@ -55,14 +55,13 @@ LoadCandleData :: proc(candleData : ^CandleData, fileName : string)
 
 	lines := strings.split_lines(text)
 
-	candleData.candleCount = len(lines) - 1
-	candleData.candles = make([]Candle, candleData.candleCount)
+	candles := make([]Candle, len(lines) - 1)
 
-	for i := 0; i < candleData.candleCount; i += 1
+	for i in 0 ..< len(candles)
 	{
 		sectionIndex := 0
 
-		candle := &candleData.candles[candleIndex]
+		candle := &candles[candleIndex]
 
 		for section in strings.split_iterator(&lines[i], ",")
 		{
@@ -76,16 +75,12 @@ LoadCandleData :: proc(candleData : ^CandleData, fileName : string)
 					fmt.println("NOT OK")
 				}
 
-				candle.timestamp = i32(timestamp / 1000 - ORIGIN_TIMESTAMP)
-				case 1:
-				candle.open = f32(strconv.atof(section))
-				case 2:
-				candle.high = f32(strconv.atof(section))
-				case 3:
-				candle.low = f32(strconv.atof(section))
-				case 4:
-				candle.close = f32(strconv.atof(section))
+				candle.timestamp = i32(timestamp / 1000 - BINANCE_ORIGIN_TIMESTAMP)
 
+				case 1: candle.open = f32(strconv.atof(section))
+				case 2: candle.high = f32(strconv.atof(section))
+				case 3: candle.low = f32(strconv.atof(section))
+				case 4: candle.close = f32(strconv.atof(section))
 				case 6:
 				timestamp, ok := strconv.parse_u64(section)
 
@@ -96,7 +91,7 @@ LoadCandleData :: proc(candleData : ^CandleData, fileName : string)
 					fmt.println("NOT OK")
 				}
 
-				candle.scale = i32(timestamp - ORIGIN_TIMESTAMP) - candle.timestamp
+				candle.scale = i32(timestamp - BINANCE_ORIGIN_TIMESTAMP) - candle.timestamp
 			}
 
 			sectionIndex += 1
@@ -104,26 +99,32 @@ LoadCandleData :: proc(candleData : ^CandleData, fileName : string)
 
 		candleIndex += 1
 	}
+
+	return candles
 }
 
-CreateCloseLevels :: proc(candleData : ^CandleData, color : raylib.Color)
+CreateCloseLevels :: proc(candles : []Candle, color : raylib.Color) -> CandleCloseLevels
 {
-	candleData.closeLevelColor = color
+	closeLevels : CandleCloseLevels
+	
+	closeLevels.color = color
 
-	candleData.closeLevels = make([]CandleCloseLevel, candleData.candleCount)
+	// Could this upper limit be reduced?
+	closeLevels.closeLevels = make([]CandleCloseLevel, len(candles))
 
-	candleData.closeLevelCount = 0
+	closeLevels.closeLevelCount = 0
 
-	for i := 0; i < candleData.candleCount - 1; i += 1
+	for i in 0 ..< len(candles) - 1
 	{
-		candle : ^Candle = &candleData.candles[i]
-		nextCandle : ^Candle = &candleData.candles[i + 1]
+		candle : ^Candle = &candles[i]
+		nextCandle : ^Candle = &candles[i + 1]
 
-		closeLevel : ^CandleCloseLevel = &candleData.closeLevels[candleData.closeLevelCount]
+		closeLevel : ^CandleCloseLevel = &closeLevels.closeLevels[closeLevels.closeLevelCount]
 
 		// If red candle
 		if candle.close <= candle.open
 		{
+			// If next candle is green
 			if nextCandle.close > nextCandle.open
 			{
 				closeLevel.startTimestamp = nextCandle.timestamp + nextCandle.scale
@@ -131,9 +132,9 @@ CreateCloseLevels :: proc(candleData : ^CandleData, color : raylib.Color)
 				closeLevel.price = candle.close
 
 				// Find end point for level
-				for j := i + 2; j < candleData.candleCount - 1; j += 1
+				for j in i + 2 ..< len(candles) - 1
 				{
-					candle2 : ^Candle = &candleData.candles[j]
+					candle2 : ^Candle = &candles[j]
 
 					if candle2.close < candle.close
 					{
@@ -144,13 +145,13 @@ CreateCloseLevels :: proc(candleData : ^CandleData, color : raylib.Color)
 
 				if closeLevel.startTimestamp != closeLevel.endTimestamp
 				{
-					candleData.closeLevelCount += 1
+					closeLevels.closeLevelCount += 1
 				}
 			}
 		}
-		else
+		else // If green candle
 		{
-			// If green candle
+			// If next candle is red
 			if nextCandle.close < nextCandle.open
 			{
 				closeLevel.startTimestamp = nextCandle.timestamp + nextCandle.scale
@@ -158,9 +159,9 @@ CreateCloseLevels :: proc(candleData : ^CandleData, color : raylib.Color)
 				closeLevel.price = candle.close
 
 				// Find end point for level
-				for j := i + 2; j < candleData.candleCount - 1; j += 1
+				for j in i + 2 ..< len(candles) - 1
 				{
-					candle2 : ^Candle = &candleData.candles[j]
+					candle2 : ^Candle = &candles[j]
 
 					if candle2.close > candle.close
 					{
@@ -171,19 +172,21 @@ CreateCloseLevels :: proc(candleData : ^CandleData, color : raylib.Color)
 
 				if closeLevel.startTimestamp != closeLevel.endTimestamp
 				{
-					candleData.closeLevelCount += 1
+					closeLevels.closeLevelCount += 1
 				}
 			}
 		}
 	}
+
+	return closeLevels
 }
 
-DestroyCloseLevels :: proc(candleData : ^CandleData)
+DestroyCloseLevels :: proc(candleCloseLevels : CandleCloseLevels)
 {
-	delete(candleData.closeLevels)
+	delete(candleCloseLevels.closeLevels)
 }
 
-UnloadCandleData :: proc(candleData : ^CandleData)
+UnloadCandles :: proc(candles : []Candle)
 {
-	delete(candleData.candles)
+	delete(candles)
 }

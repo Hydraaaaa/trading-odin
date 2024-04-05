@@ -1,2 +1,8 @@
 /.vim
 /src/.bin
+.vscode/tasks.json
+historicalminutecandles.bin
+historicaltrades.bin
+src.exe
+src.pdb
+ols.json
