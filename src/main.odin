@@ -47,6 +47,15 @@ CandleTimeframe :: enum
 //CANDLE_TIMEFRAME_INCREMENTS : [10]i32 : {60, 300, 900, 1800, 3600, 10_800, 21_600, 43_200, 86_400, 604_800}
 CANDLE_TIMEFRAME_INCREMENTS : [5]i32 : {1_000_000, 604_800, 86_400, 14_400, 3600}
 
+// The number of days between 2010 and each month leading up to December 2014
+MONTHLY_INCREMENTS : [48]i32 : \
+{ \
+	DAY * 31, DAY * 59, DAY * 90, DAY * 120, DAY * 151, DAY * 181, DAY * 212, DAY * 243, DAY * 273, DAY * 304, DAY * 334, DAY * 365, \
+	DAY * 396, DAY * 424, DAY * 455, DAY * 485, DAY * 516, DAY * 546, DAY * 577, DAY * 608, DAY * 638, DAY * 669, DAY * 699, DAY * 730, \
+	DAY * 761, DAY * 790, DAY * 821, DAY * 851, DAY * 882, DAY * 912, DAY * 943, DAY * 974, DAY * 1004, DAY * 1035, DAY * 1065, DAY * 1096, \
+	DAY * 1127, DAY * 1155, DAY * 1186, DAY * 1216, DAY * 1247, DAY * 1277, DAY * 1308, DAY * 1339, DAY * 1369, DAY * 1400, DAY * 1430, DAY * 1461 \
+}
+
 main :: proc()
 {
 	using raylib
@@ -75,6 +84,8 @@ main :: proc()
 	candles : [ZOOM_INDEX_COUNT][]Candle
 	candleTimestampOffsets : [ZOOM_INDEX_COUNT]i32
 	candleCloseLevels : [ZOOM_INDEX_COUNT]CandleCloseLevels
+	
+	candleTimeframeIncrements := CANDLE_TIMEFRAME_INCREMENTS
 
 	candles[0] = LoadCandles("1mo")
 	candleTimestampOffsets[0] = candles[0][0].timestamp
@@ -123,9 +134,9 @@ main :: proc()
 
 	// Set initial camera X position to show the most recent candle on the right
 	{
-		candle : ^Candle = &candles[zoomIndex][len(candles[zoomIndex]) - 1]
+		candleIndex := i32(len(candles[zoomIndex]) - 1)
 
-		cameraPosX = i32(f64(candle.timestamp + candle.scale) / scaleData.horizontalScale - INITIAL_SCREEN_WIDTH + 70)
+		cameraPosX = i32(f64(GetCandleTimestamp(candleIndex, CandleTimeframe(zoomIndex), candleTimestampOffsets[zoomIndex]) + GetCandleDuration(candleIndex, CandleTimeframe(zoomIndex))) / scaleData.horizontalScale - INITIAL_SCREEN_WIDTH + 70)
 	}
 
 	cameraTimestamp := i32(f64(cameraPosX) * scaleData.horizontalScale)
@@ -133,10 +144,16 @@ main :: proc()
 	mouseTimestamp : i32
 
 	// Slice of all candles that currently fit within the width of the screen
-	visibleCandles : []Candle = GetVisibleCandles(candles[zoomIndex], CandleTimeframe(zoomIndex), candleTimestampOffsets[zoomIndex], cameraPosX, screenWidth, scaleData)
-	highestCandle : Candle = GetHighestCandle(visibleCandles)
-	lowestCandle : Candle = GetLowestCandle(visibleCandles)
-	candleUnderCursor : Candle
+	visibleCandles : []Candle
+	visibleCandlesStartIndex : i32
+	visibleCandles, visibleCandlesStartIndex = GetVisibleCandles(candles[zoomIndex], CandleTimeframe(zoomIndex), candleTimestampOffsets[zoomIndex], cameraPosX, screenWidth, scaleData)
+
+	highestCandle, highestCandleIndex := GetHighestCandle(visibleCandles)
+	lowestCandle, lowestCandleIndex := GetLowestCandle(visibleCandles)
+
+	highestCandleIndex += visibleCandlesStartIndex
+	lowestCandleIndex += visibleCandlesStartIndex
+	cursorCandleIndex : i32
 
 	initialVerticalScale : f64
 
@@ -256,9 +273,12 @@ main :: proc()
 		// Update visibleCandles
 		cameraTimestamp = Timestamp_FromPixelX(cameraPosX, scaleData)
 		cameraEndTimestamp = Timestamp_FromPixelX(cameraPosX + screenWidth, scaleData)
-		visibleCandles = GetVisibleCandles(candles[zoomIndex], CandleTimeframe(zoomIndex), candleTimestampOffsets[zoomIndex], cameraPosX, screenWidth, scaleData)
-		highestCandle = GetHighestCandle(visibleCandles)
-		lowestCandle = GetLowestCandle(visibleCandles)
+		visibleCandles, visibleCandlesStartIndex = GetVisibleCandles(candles[zoomIndex], CandleTimeframe(zoomIndex), candleTimestampOffsets[zoomIndex], cameraPosX, screenWidth, scaleData)
+		highestCandle, highestCandleIndex = GetHighestCandle(visibleCandles)
+		lowestCandle, lowestCandleIndex = GetLowestCandle(visibleCandles)
+
+		highestCandleIndex += visibleCandlesStartIndex
+		lowestCandleIndex += visibleCandlesStartIndex
 
 		// If the last candle is before the start of the viewport
 		// Update candle under cursor
@@ -267,9 +287,10 @@ main :: proc()
 			// As we are doing the opposite conversion, the mouse will always be less than or equal to the candles
 			timestamp : i32 = Timestamp_FromPixelX(GetMouseX() + cameraPosX + 1, scaleData)
 
-			if visibleCandles[len(visibleCandles) - 1].timestamp < timestamp
+			//if i32(len(visibleCandles) - 1) * candleTimeframeIncrements[zoomIndex] < timestamp @@@
+			if GetCandleTimestamp(i32(len(visibleCandles)) + visibleCandlesStartIndex - 1, CandleTimeframe(zoomIndex), candleTimestampOffsets[zoomIndex]) < timestamp
 			{
-				candleUnderCursor = visibleCandles[len(visibleCandles) - 1]
+				cursorCandleIndex = i32(len(visibleCandles)) - 1 + visibleCandlesStartIndex
 			}
 			else
 			{
@@ -278,9 +299,9 @@ main :: proc()
 				// There was a mysterious off-by-one issue when slicing off the last candle (len(visibleCandles) - 2), second last candle was never handled for some reason
 				for candle, i in visibleCandles[:]
 				{
-					if visibleCandles[i + 1].timestamp >= timestamp
+					if GetCandleTimestamp(i32(i) + visibleCandlesStartIndex + 1, CandleTimeframe(zoomIndex), candleTimestampOffsets[zoomIndex]) >= timestamp
 					{
-						candleUnderCursor = candle
+						cursorCandleIndex = i32(i) + visibleCandlesStartIndex
 						break
 					}
 				}
@@ -824,10 +845,10 @@ main :: proc()
 
 		if zoomIndexHTF >= 0
 		{
-			visibleHTFCandles := GetVisibleCandles(candles[zoomIndexHTF], CandleTimeframe(zoomIndexHTF), candleTimestampOffsets[zoomIndexHTF], cameraPosX, screenWidth, scaleData)
-			for candle in visibleHTFCandles
+			visibleHTFCandles, visibleHTFCandleStartIndex := GetVisibleCandles(candles[zoomIndexHTF], CandleTimeframe(zoomIndexHTF), candleTimestampOffsets[zoomIndexHTF], cameraPosX, screenWidth, scaleData)
+			for candle, i in visibleHTFCandles
 			{
-				xPos : i32 = Timestamp_ToPixelX(candle.timestamp, scaleData) - cameraPosX
+				xPos : i32 = Candle_ToPixelX(visibleHTFCandleStartIndex + i32(i), CandleTimeframe(zoomIndexHTF), candleTimestampOffsets[zoomIndexHTF], scaleData) - cameraPosX
 				candleWidth : i32 = Timestamp_ToPixelX(candle.scale, scaleData)
 
 				scaledOpen : i32 = Price_ToPixelY(candle.open, scaleData)
@@ -869,9 +890,9 @@ main :: proc()
 		}
 
 		// Draw Candles
-		for candle in visibleCandles
+		for candle, i in visibleCandles
 		{
-			xPos : i32 = Timestamp_ToPixelX(candle.timestamp, scaleData) - cameraPosX
+			xPos : i32 = Candle_ToPixelX(i32(i) + visibleCandlesStartIndex, CandleTimeframe(zoomIndex), candleTimestampOffsets[zoomIndex], scaleData) - cameraPosX
 			candleWidth : i32 = Timestamp_ToPixelX(candle.scale, scaleData)
 
 			scaledOpen : i32 = Price_ToPixelY(candle.open, scaleData)
@@ -916,8 +937,8 @@ main :: proc()
 			DrawPixel(i, GetMouseY(), crosshairColor)
 		}
 
-		xPos : i32 = Timestamp_ToPixelX(candleUnderCursor.timestamp, scaleData) - cameraPosX
-		candleWidth : i32 = Timestamp_ToPixelX(candleUnderCursor.scale, scaleData)
+		xPos : i32 = Candle_ToPixelX(cursorCandleIndex, CandleTimeframe(zoomIndex), candleTimestampOffsets[zoomIndex], scaleData) - cameraPosX
+		candleWidth : i32 = Timestamp_ToPixelX(GetCandleDuration(cursorCandleIndex, CandleTimeframe(zoomIndex)), scaleData)
 
 		for i : i32 = 0; i < screenHeight; i += 2
 		{
@@ -935,7 +956,7 @@ main :: proc()
 		// Highest Candle
 		output = fmt.bprintf(text[:], "%.2f\x00", highestCandle.high)
 		textRect = MeasureTextEx(font, strings.unsafe_string_to_cstring(output), FONT_SIZE, 0)
-		labelPosX = f32(Timestamp_ToPixelX(highestCandle.timestamp, scaleData) - cameraPosX) - textRect.x / 2 + candleCenterOffset
+		labelPosX = f32(Candle_ToPixelX(highestCandleIndex, CandleTimeframe(zoomIndex), candleTimestampOffsets[zoomIndex], scaleData) - cameraPosX) - textRect.x / 2 + candleCenterOffset
 		labelPosY = f32(Price_ToPixelY(highestCandle.high, scaleData) - cameraPosY) - textRect.y - LABEL_PADDING
 
 		if labelPosX < 2
@@ -954,7 +975,7 @@ main :: proc()
 		// Lowest Candle
 		output = fmt.bprintf(text[:], "%.2f\x00", lowestCandle.low)
 		textRect = MeasureTextEx(font, strings.unsafe_string_to_cstring(output), FONT_SIZE, 0)
-		labelPosX = f32(Timestamp_ToPixelX(lowestCandle.timestamp, scaleData) - cameraPosX) - textRect.x / 2 + candleCenterOffset
+		labelPosX = f32(Candle_ToPixelX(lowestCandleIndex, CandleTimeframe(zoomIndex), candleTimestampOffsets[zoomIndex], scaleData) - cameraPosX) - textRect.x / 2 + candleCenterOffset
 		labelPosY = f32(Price_ToPixelY(lowestCandle.low, scaleData) - cameraPosY) + LABEL_PADDING
 
 		if labelPosX < 2
@@ -979,7 +1000,7 @@ main :: proc()
 		DrawTextEx(font, strings.unsafe_string_to_cstring(output), {0, FONT_SIZE}, FONT_SIZE, 0, WHITE)
 
 		// Current Candle Price
-		output = fmt.bprintf(text[:], "%.2f\x00", candleUnderCursor.open)
+		output = fmt.bprintf(text[:], "%.2f\x00", candles[zoomIndex][cursorCandleIndex].open)
 		DrawTextEx(font, strings.unsafe_string_to_cstring(output), {0, FONT_SIZE * 2}, FONT_SIZE, 0, WHITE)
 
 		labelBackground := BLACK
@@ -1019,16 +1040,16 @@ main :: proc()
 	}
 }
 
-GetVisibleCandles :: proc(candles : []Candle, candleTimeframe : CandleTimeframe, timestampOffset : i32, cameraPosX : i32, screenWidth : i32, scaleData : ScaleData) -> []Candle
+GetVisibleCandles :: proc(candles : []Candle, timeframe : CandleTimeframe, timestampOffset : i32, cameraPosX : i32, screenWidth : i32, scaleData : ScaleData) -> ([]Candle, i32)
 {
-	candleTimeframeIncrements := CANDLE_TIMEFRAME_INCREMENTS
+	timeframeIncrements := CANDLE_TIMEFRAME_INCREMENTS
 
 	cameraEndTimestamp := Timestamp_FromPixelX(cameraPosX + screenWidth, scaleData)
 
 	if timestampOffset > cameraEndTimestamp
 	{
 		// Camera is further left than the leftmost candle
-		return nil
+		return nil, 0
 	}
 
 	cameraTimestamp := Timestamp_FromPixelX(cameraPosX + 1, scaleData) - timestampOffset
@@ -1037,14 +1058,14 @@ GetVisibleCandles :: proc(candles : []Candle, candleTimeframe : CandleTimeframe,
 	lastCandleIndex := i32(len(candles)) - 1
 	
 	// Everything below months is uniform, and can be mathed
-	if candleTimeframe != CandleTimeframe.MONTH
+	if timeframe != CandleTimeframe.MONTH
 	{
-		increment := candleTimeframeIncrements[int(candleTimeframe)]
+		increment := timeframeIncrements[int(timeframe)]
 
 		if i32(len(candles)) * increment < cameraTimestamp
 		{
 			// Camera is further right than the rightmost candle
-			return nil
+			return nil, 0
 		}
 
 		startIndex := cameraTimestamp / increment
@@ -1068,17 +1089,10 @@ GetVisibleCandles :: proc(candles : []Candle, candleTimeframe : CandleTimeframe,
 			endIndex = lastCandleIndex
 		}
 		
-		return candles[startIndex:endIndex]
+		return candles[startIndex:endIndex], startIndex
 	}
 
-	// The number of days between 2010 and each month leading up to December 2014
-	monthlyIncrements : [48]i32 = \
-	{ \
-		DAY * 31, DAY * 59, DAY * 90, DAY * 120, DAY * 151, DAY * 181, DAY * 212, DAY * 243, DAY * 273, DAY * 304, DAY * 334, DAY * 365, \
-		DAY * 396, DAY * 424, DAY * 455, DAY * 485, DAY * 516, DAY * 546, DAY * 577, DAY * 608, DAY * 638, DAY * 669, DAY * 699, DAY * 730, \
-		DAY * 761, DAY * 790, DAY * 821, DAY * 851, DAY * 882, DAY * 912, DAY * 943, DAY * 974, DAY * 1004, DAY * 1035, DAY * 1065, DAY * 1096, \
-		DAY * 1127, DAY * 1155, DAY * 1186, DAY * 1216, DAY * 1247, DAY * 1277, DAY * 1308, DAY * 1339, DAY * 1369, DAY * 1400, DAY * 1430, DAY * 1461 \
-	}
+	monthlyIncrements := MONTHLY_INCREMENTS
 	
 	cameraCandleIndex := cameraTimestamp / monthlyIncrements[47] * 48
 	remainingCameraTimestamp := cameraTimestamp % monthlyIncrements[47]
@@ -1095,7 +1109,7 @@ GetVisibleCandles :: proc(candles : []Candle, candleTimeframe : CandleTimeframe,
 	if i32(len(candles)) <= cameraCandleIndex
 	{
 		// Camera is further right than the rightmost candle
-		return nil
+		return nil, 0
 	}
 
 	cameraEndCandleIndex := cameraEndTimestamp / monthlyIncrements[47] * 48
@@ -1128,43 +1142,92 @@ GetVisibleCandles :: proc(candles : []Candle, candleTimeframe : CandleTimeframe,
 		cameraEndCandleIndex = lastCandleIndex		
 	}
 
-	return candles[cameraCandleIndex:cameraEndCandleIndex]
+	return candles[cameraCandleIndex:cameraEndCandleIndex], cameraCandleIndex
 }
 
-GetHighestCandle :: proc(candles : []Candle) -> Candle
+GetCandleTimestamp :: proc(index : i32, timeframe : CandleTimeframe, timestampOffset : i32) -> i32
+{
+	if timeframe != CandleTimeframe.MONTH
+	{
+		timeframeIncrements := CANDLE_TIMEFRAME_INCREMENTS
+		
+		return timeframeIncrements[timeframe] * index + timestampOffset
+	}
+
+	monthlyIncrements := MONTHLY_INCREMENTS
+	
+	fourYearSpans := index / 48
+	remainder := index % 48
+	
+	return monthlyIncrements[47] * fourYearSpans + monthlyIncrements[remainder] + timestampOffset
+}
+
+Candle_ToPixelX :: proc(index : i32, timeframe : CandleTimeframe, timestampOffset : i32, scaleData : ScaleData) -> i32
+{
+	return Timestamp_ToPixelX(GetCandleTimestamp(index, timeframe, timestampOffset), scaleData)
+}
+
+GetCandleDuration :: proc(index : i32, timeframe : CandleTimeframe) -> i32
+{
+	if timeframe != CandleTimeframe.MONTH
+	{
+		timeframeIncrements := CANDLE_TIMEFRAME_INCREMENTS
+		
+		return timeframeIncrements[timeframe]
+	}
+
+	monthlyIncrements := MONTHLY_INCREMENTS
+	
+	normalisedIndex := index % 48
+	
+	if normalisedIndex != 0
+	{
+		return monthlyIncrements[normalisedIndex] - monthlyIncrements[normalisedIndex - 1]
+	}
+	
+	return monthlyIncrements[normalisedIndex]
+}
+
+GetHighestCandle :: proc(candles : []Candle) -> (Candle, i32)
 {
 	if len(candles) == 0
 	{
-		return {}
+		return {}, 0
 	}
 
 	highestCandle := candles[0]
-	for candle in candles[1:]
+	highestCandleIndex : i32 = 0
+
+	for candle, i in candles[1:]
 	{
 		if candle.high > highestCandle.high
 		{
 			highestCandle = candle
+			highestCandleIndex = i32(i) + 1
 		}
 	}
 
-	return highestCandle
+	return highestCandle, highestCandleIndex
 }
 
-GetLowestCandle :: proc(candles : []Candle) -> Candle
+GetLowestCandle :: proc(candles : []Candle) -> (Candle, i32)
 {
 	if len(candles) == 0
 	{
-		return {}
+		return {}, 0
 	}
 
 	lowestCandle := candles[0]
-	for candle in candles[1:]
+	lowestCandleIndex : i32 = 0
+
+	for candle, i in candles[1:]
 	{
 		if candle.low < lowestCandle.low
 		{
 			lowestCandle = candle
+			lowestCandleIndex = i32(i) + 1
 		}
 	}
 
-	return lowestCandle
+	return lowestCandle, lowestCandleIndex
 }
