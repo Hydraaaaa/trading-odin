@@ -20,22 +20,7 @@ Candle :: struct
 	close : f32,
 }
 
-CandleCloseLevel :: struct
-{
-	startTimestamp : i32,
-	endTimestamp : i32,
-	price : f32,
-}
-
-CandleCloseLevels :: struct
-{
-	closeLevels : []CandleCloseLevel,
-	closeLevelCount : int,
-
-	color : raylib.Color,
-}
-
-
+// TODO: Pending Deletion
 LoadCandles :: proc(fileName : string) -> []Candle
 {
 	data, ok := os.read_entire_file(fileName, context.allocator)
@@ -103,90 +88,182 @@ LoadCandles :: proc(fileName : string) -> []Candle
 	return candles
 }
 
-CreateCloseLevels :: proc(candles : []Candle, color : raylib.Color) -> CandleCloseLevels
-{
-	closeLevels : CandleCloseLevels
-	
-	closeLevels.color = color
-
-	// Could this upper limit be reduced?
-	closeLevels.closeLevels = make([]CandleCloseLevel, len(candles))
-
-	closeLevels.closeLevelCount = 0
-
-	for i in 0 ..< len(candles) - 1
-	{
-		candle : ^Candle = &candles[i]
-		nextCandle : ^Candle = &candles[i + 1]
-
-		closeLevel : ^CandleCloseLevel = &closeLevels.closeLevels[closeLevels.closeLevelCount]
-
-		// If red candle
-		if candle.close <= candle.open
-		{
-			// If next candle is green
-			if nextCandle.close > nextCandle.open
-			{
-				closeLevel.startTimestamp = nextCandle.timestamp + nextCandle.scale
-				closeLevel.endTimestamp = -1 // -1 meaning the level is still active
-				closeLevel.price = candle.close
-
-				// Find end point for level
-				for j in i + 2 ..< len(candles) - 1
-				{
-					candle2 : ^Candle = &candles[j]
-
-					if candle2.close < candle.close
-					{
-						closeLevel.endTimestamp = candle2.timestamp + candle2.scale
-						break
-					}
-				}
-
-				if closeLevel.startTimestamp != closeLevel.endTimestamp
-				{
-					closeLevels.closeLevelCount += 1
-				}
-			}
-		}
-		else // If green candle
-		{
-			// If next candle is red
-			if nextCandle.close < nextCandle.open
-			{
-				closeLevel.startTimestamp = nextCandle.timestamp + nextCandle.scale
-				closeLevel.endTimestamp = -1 // -1 meaning the level is still active
-				closeLevel.price = candle.close
-
-				// Find end point for level
-				for j in i + 2 ..< len(candles) - 1
-				{
-					candle2 : ^Candle = &candles[j]
-
-					if candle2.close > candle.close
-					{
-						closeLevel.endTimestamp = candle2.timestamp
-						break
-					}
-				}
-
-				if closeLevel.startTimestamp != closeLevel.endTimestamp
-				{
-					closeLevels.closeLevelCount += 1
-				}
-			}
-		}
-	}
-
-	return closeLevels
-}
-
-DestroyCloseLevels :: proc(candleCloseLevels : CandleCloseLevels)
-{
-	delete(candleCloseLevels.closeLevels)
-}
-
 UnloadCandles :: proc(candles : []Candle)
 {
 	delete(candles)
+}
+
+// timestampOffset refers to the time between 2010 and the timestamp of the first candle
+Candle_TimestampToIndex :: proc(timestamp : i32, candles : []Candle, timeframe : CandleTimeframe, timestampOffset : i32) -> i32
+{
+	timeframeIncrements := CANDLE_TIMEFRAME_INCREMENTS
+
+	lastCandleIndex := i32(len(candles)) - 1
+
+	if timeframe == CandleTimeframe.MONTH
+	{
+		// TODO: Fresh mind, is there a problem with the simple approach of subtracting indices?
+		monthlyIncrements := MONTHLY_INCREMENTS
+		
+		offsetIndex := timestampOffset / monthlyIncrements[47] * 48
+		remainingOffsetTimestamp := timestampOffset % monthlyIncrements[47]
+		
+		remainingOffsetIndex : i32 = 0
+
+		for remainingOffsetTimestamp > monthlyIncrements[remainingOffsetIndex]
+		{
+			remainingOffsetIndex += 1
+		}
+
+		index := timestamp / monthlyIncrements[47] * 48 - offsetIndex
+		remainingTimestamp := timestamp % monthlyIncrements[47]
+
+		remainingIndex : i32 = 0
+		
+		for remainingTimestamp > monthlyIncrements[remainingIndex]
+		{
+			remainingIndex += 1
+		}
+		
+		index += remainingIndex - remainingOffsetIndex
+
+		if index < 0
+		{
+			index = 0
+		}
+		else if index > lastCandleIndex
+		{
+			index = lastCandleIndex		
+		}
+		
+		return index
+	}
+	
+	// Everything below months is uniform, and can be mathed
+	increment := timeframeIncrements[int(timeframe)]
+
+	index := (timestamp - timestampOffset) / increment
+	
+	if index < 0
+	{
+		index = 0
+	}
+	else if index > lastCandleIndex
+	{
+		index = lastCandleIndex
+	}
+
+	return index
+}
+
+// timestampOffset refers to the time between 2010 and the timestamp of the first candle
+Candle_IndexToTimestamp :: proc(index : i32, timeframe : CandleTimeframe, timestampOffset : i32) -> i32
+{
+	if timeframe == CandleTimeframe.MONTH
+	{
+		monthlyIncrements := MONTHLY_INCREMENTS
+		
+		fourYearSpans := index / 48
+		remainder := index % 48
+		
+		return monthlyIncrements[47] * fourYearSpans + monthlyIncrements[remainder] + timestampOffset
+	}
+
+	timeframeIncrements := CANDLE_TIMEFRAME_INCREMENTS
+	
+	return timeframeIncrements[timeframe] * index + timestampOffset
+}
+
+Candle_IndexToPixelX :: proc(index : i32, timeframe : CandleTimeframe, timestampOffset : i32, scaleData : ScaleData) -> i32
+{
+	return Timestamp_ToPixelX(Candle_IndexToTimestamp(index, timeframe, timestampOffset), scaleData)
+}
+
+Candle_IndexToDuration :: proc(index : i32, timeframe : CandleTimeframe) -> i32
+{
+	if timeframe != CandleTimeframe.MONTH
+	{
+		timeframeIncrements := CANDLE_TIMEFRAME_INCREMENTS
+		
+		return timeframeIncrements[timeframe]
+	}
+
+	monthlyIncrements := MONTHLY_INCREMENTS
+	
+	normalisedIndex := index % 48
+	
+	if normalisedIndex != 0
+	{
+		return monthlyIncrements[normalisedIndex] - monthlyIncrements[normalisedIndex - 1]
+	}
+	
+	return monthlyIncrements[normalisedIndex]
+}
+
+Candle_HighestHigh :: proc(candles : []Candle) -> (Candle, i32)
+{
+	if len(candles) == 0
+	{
+		return {}, 0
+	}
+
+	highestCandle := candles[0]
+	highestCandleIndex : i32 = 0
+
+	for candle, i in candles[1:]
+	{
+		if candle.high > highestCandle.high
+		{
+			highestCandle = candle
+			highestCandleIndex = i32(i) + 1
+		}
+	}
+
+	return highestCandle, highestCandleIndex
+}
+
+Candle_LowestLow :: proc(candles : []Candle) -> (Candle, i32)
+{
+	if len(candles) == 0
+	{
+		return {}, 0
+	}
+
+	lowestCandle := candles[0]
+	lowestCandleIndex : i32 = 0
+
+	for candle, i in candles[1:]
+	{
+		if candle.low < lowestCandle.low
+		{
+			lowestCandle = candle
+			lowestCandleIndex = i32(i) + 1
+		}
+	}
+
+	return lowestCandle, lowestCandleIndex
+}
+
+Candle_FloorTimestamp :: proc(timestamp : i32, timeframe : CandleTimeframe) -> i32
+{
+	timeframeIncrements := CANDLE_TIMEFRAME_INCREMENTS
+
+	if timeframe == CandleTimeframe.MONTH
+	{
+		monthlyIncrements := MONTHLY_INCREMENTS
+		
+		remainingTimestamp := timestamp % monthlyIncrements[47]
+
+		remainingIndex := 0
+		
+		for remainingTimestamp > monthlyIncrements[remainingIndex]
+		{
+			remainingIndex += 1
+		}
+
+		return timestamp - remainingTimestamp + monthlyIncrements[remainingIndex]
+	}
+	
+	// Everything below months is uniform, and can be mathed
+	return timestamp - timestamp % timeframeIncrements[timeframe]
 }

@@ -1,5 +1,16 @@
 package main
 
+DayOfWeek :: enum
+{
+    MONDAY,
+    TUESDAY,
+    WEDNESDAY,
+    THURSDAY,
+    FRIDAY,
+    SATURDAY,
+    SUNDAY
+}
+
 // The number of seconds between 1970 and 2010
 TIMESTAMP_2010 :: 1_262_304_000
 DAY :: 86400
@@ -64,4 +75,10 @@ Timestamp_ToDayMonthYear :: proc(timestamp : i32) -> DayMonthYear
 	date.day += int(timestamp) / DAY
 
 	return date
+}
+
+Timestamp_ToDayOfWeek :: proc(timestamp : i32) -> DayOfWeek
+{
+    WEEK :: DAY * 7
+    return DayOfWeek(timestamp / WEEK % 7)
 }
