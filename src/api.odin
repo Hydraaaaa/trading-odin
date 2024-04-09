@@ -22,24 +22,15 @@ Trade :: struct
 	isBuy : bool,
 }
 
-MinuteCandleData :: struct
-{
-	open : f32,
-	high : f32,
-	low : f32,
-	close : f32,
-	volume : f32,
-}
-
 TRADES_FILE :: "historicaltrades.bin"
 MINUTE_CANDLES_FILE :: "historicalminutecandles.bin"
 
 BYBIT_ORIGIN_DATE :: DayMonthYear{25, 3, 2020}
 BYBIT_ORIGIN_MINUTE_TIMESTAMP :: 1_585_132_560 - TIMESTAMP_2010
 
-LoadHistoricalData :: proc() -> [dynamic]MinuteCandleData
+LoadHistoricalData :: proc() -> [dynamic]Candle
 {
-	candles := make([dynamic]MinuteCandleData, 1440)
+	candles := make([dynamic]Candle, 0, 1440)
 
 	firstTrade : Trade
 	previousDayLastTrade : Trade
@@ -113,8 +104,8 @@ LoadHistoricalData :: proc() -> [dynamic]MinuteCandleData
 			return nil
 		}
 
-		localCandles := slice.reinterpret([]MinuteCandleData, bytes)
-		
+		localCandles := slice.reinterpret([]Candle, bytes)
+
 		reserve(&candles, len(localCandles))
 		
 		for candle in localCandles
@@ -143,7 +134,7 @@ LoadHistoricalData :: proc() -> [dynamic]MinuteCandleData
 }
 
 // Returns the next date to be downloaded in future
-DownloadDay :: proc(date : DayMonthYear, candles : ^[dynamic]MinuteCandleData) -> DayMonthYear
+DownloadDay :: proc(date : DayMonthYear, candles : ^[dynamic]Candle) -> DayMonthYear
 {
 	pathBuffer : [len("https://public.bybit.com/trading/BTCUSDT/BTCUSDTYYYY-MM-DD.csv.gz")]u8
 	
@@ -312,7 +303,7 @@ DownloadDay :: proc(date : DayMonthYear, candles : ^[dynamic]MinuteCandleData) -
 	}
 	
 
-	candle : MinuteCandleData
+	candle : Candle
 
 	// First candle will open at the close of the previous candle
 	candle.open = previousDayLastTrade.price
