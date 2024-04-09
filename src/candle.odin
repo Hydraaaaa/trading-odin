@@ -212,3 +212,27 @@ Candle_FloorTimestamp :: proc(timestamp : i32, timeframe : CandleTimeframe) -> i
 	// Everything below months is uniform, and can be mathed
 	return timestamp - timestamp % timeframeIncrements[timeframe]
 }
+
+Candle_Merge :: proc(candles : []Candle) -> Candle
+{
+	newCandle := candles[0]
+	
+	for candle in candles[1:]
+	{
+		newCandle.volume += candle.volume
+
+		if candle.high > newCandle.high
+		{
+			newCandle.high = candle.high
+		}
+
+		if candle.low < newCandle.low
+		{
+			newCandle.low = candle.low
+		}
+	}
+	
+	newCandle.close = candles[len(candles) - 1].close
+	
+	return newCandle
+}

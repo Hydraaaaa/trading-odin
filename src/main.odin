@@ -40,7 +40,7 @@ main :: proc()
 	windowedScreenWidth : i32 = 0
 	windowedScreenHeight : i32 = 0
 
-    SetTargetFPS(340)
+    SetTargetFPS(60)
 	fpsString : string
 
 	font := LoadFontEx("roboto-bold.ttf", FONT_SIZE, nil, 0)
@@ -50,83 +50,45 @@ main :: proc()
 	candleData[CandleTimeframe.MINUTE].offset = BYBIT_ORIGIN_MINUTE_TIMESTAMP
 	defer delete(candleData[CandleTimeframe.MINUTE].candles)
 	
-	// Create higher timeframe candles ><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
 	candleTimeframeIncrements := CANDLE_TIMEFRAME_INCREMENTS
-	
-	for timeframe in CandleTimeframe.MINUTE_5 ..= CandleTimeframe.DAY
+
+	// Create higher timeframe candles ><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
 	{
-		candles := candleData[timeframe].candles
-
-		prevTimeframe := timeframe - CandleTimeframe(1)
-		prevCandles := candleData[prevTimeframe].candles
+		prevTimeframe := CandleTimeframe.MINUTE
 		
-		timeframeDivisor := int(candleTimeframeIncrements[timeframe] / candleTimeframeIncrements[prevTimeframe])
-		
-		// New size
-		// + 1 accounts for a higher timeframe candle at the beginning with only partial data
-		reserve(&candles, len(candleData[prevTimeframe].candles) / timeframeDivisor + 1)
-		
-		candleData[timeframe].offset = Candle_FloorTimestamp(candleData[prevTimeframe].offset, timeframe)
-		
-		// Separately create first candle to handle the case where the candle timestamps aren't aligned
-		newCandle := prevCandles[0]
-		
-		prevTimeframeIndex : i32 = 1
-
-		prevCandle : Candle
-
-		// While previous timeframe index doesn't align with the current timeframe index
-		for (candleData[prevTimeframe].offset + prevTimeframeIndex * candleTimeframeIncrements[int(timeframe) - 1]) % candleTimeframeIncrements[timeframe] != 0
+		for timeframe in CandleTimeframe.MINUTE_5 ..= CandleTimeframe.DAY
 		{
-			prevCandle = prevCandles[prevTimeframeIndex]
+			prevCandles := candleData[prevTimeframe].candles[:]
 
-			newCandle.volume += prevCandle.volume
-
-			if prevCandle.high > newCandle.high
-			{
-				newCandle.high = prevCandle.high
-			}
-
-			if prevCandle.low > newCandle.low
-			{
-				newCandle.low = prevCandle.low
-			}
-		
-			prevTimeframeIndex += 1
-		}
-
-		newCandle.close = prevCandles[prevTimeframeIndex - 1].close
-
-		append(&candleData[timeframe].candles, newCandle)
-		
-		loopPrevCandles := prevCandles[prevTimeframeIndex:]
-		loopLength := len(loopPrevCandles) - len(loopPrevCandles) % timeframeDivisor
-		
-		for index in 0 ..< loopLength / timeframeDivisor
-		{
-			start := index * timeframeDivisor
-			end := (index + 1) * timeframeDivisor
+			prevCandlesLen := len(prevCandles)
 			
-			newCandle = loopPrevCandles[start]
+			timeframeDivisor := int(candleTimeframeIncrements[timeframe] / candleTimeframeIncrements[prevTimeframe])
 			
-			for prevCandle in loopPrevCandles[start + 1:end]
+			candleData[timeframe].offset = Candle_FloorTimestamp(candleData[prevTimeframe].offset, timeframe)
+			
+			// + 1 accounts for a higher timeframe candle at the beginning with only partial data
+			reserve(&candleData[timeframe].candles, prevCandlesLen / timeframeDivisor + 1)
+			
+			// Separately calculate the subcandles of the first candle to handle the case where the candle timestamps aren't aligned
+			firstCandleComponentCount := timeframeDivisor - int((candleData[prevTimeframe].offset % candleTimeframeIncrements[timeframe]) / candleTimeframeIncrements[prevTimeframe])
+			
+			start := 0
+			end := firstCandleComponentCount
+			
+			if end == 0
 			{
-				newCandle.volume += prevCandle.volume
-
-				if prevCandle.high > newCandle.high
-				{
-					newCandle.high = prevCandle.high
-				}
-
-				if prevCandle.low < newCandle.low
-				{
-					newCandle.low = prevCandle.low
-				}
+				end += timeframeDivisor
 			}
 			
-			newCandle.close = loopPrevCandles[end - 1].close
-		
-			append(&candleData[timeframe].candles, newCandle)
+			for end <= prevCandlesLen
+			{
+				append(&candleData[timeframe].candles, Candle_Merge(prevCandles[start:end]))
+				
+				start = end
+				end += timeframeDivisor
+			}
+			
+			prevTimeframe = timeframe
 		}
 	}
 
