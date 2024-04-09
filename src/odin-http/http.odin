@@ -1,10 +1,12 @@
 package http
 
+import "base:runtime"
+
 import "core:io"
-import "core:runtime"
 import "core:slice"
 import "core:strconv"
 import "core:strings"
+import "core:sync"
 import "core:time"
 
 Requestline_Error :: enum {
@@ -77,12 +79,16 @@ Version :: struct {
 
 // Parses an HTTP version string according to RFC 7230, section 2.6.
 version_parse :: proc(s: string) -> (version: Version, ok: bool) {
-	(len(s) > 5) or_return
-	(s[:5] == "HTTP/") or_return
-	version.major = u8(int(rune(s[5])) - '0')
-	if len(s) > 6 {
+	switch len(s) {
+	case 8:
 		(s[6] == '.') or_return
-		version.minor = u8(int(rune(s[7])) - '0')
+		version.minor = u8(int(s[7]) - '0')
+		fallthrough
+	case 6:
+		(s[:5] == "HTTP/") or_return
+		version.major = u8(int(s[5]) - '0')
+	case:
+		return
 	}
 	ok = true
 	return
@@ -318,23 +324,9 @@ request_path_write :: proc(w: io.Writer, target: URL) -> io.Error {
 		io.write_string(w, target.path) or_return
 	}
 
-	if len(target.queries) > 0 {
+	if len(target.query) > 0 {
 		io.write_byte(w, '?') or_return
-
-		i := 0
-		for key, value in target.queries {
-			io.write_string(w, key) or_return
-			if value != "" {
-				io.write_byte(w, '=') or_return
-				io.write_string(w, value) or_return
-			}
-
-			if i != len(target.queries) - 1 {
-				io.write_byte(w, '&') or_return
-			}
-
-			i += 1
-		}
+		io.write_string(w, target.query) or_return
 	}
 
 	return nil
@@ -398,6 +390,21 @@ MONTHS := [13]string {
 	" Oct ",
 	" Nov ",
 	" Dec ",
+}
+
+@(private)
+Atomic :: struct($T: typeid) {
+	raw: T,
+}
+
+@(private)
+atomic_store :: #force_inline proc(a: ^Atomic($T), val: T) {
+	sync.atomic_store(&a.raw, val)
+}
+
+@(private)
+atomic_load :: #force_inline proc(a: ^Atomic($T)) -> T {
+	return sync.atomic_load(&a.raw)
 }
 
 import "core:testing"

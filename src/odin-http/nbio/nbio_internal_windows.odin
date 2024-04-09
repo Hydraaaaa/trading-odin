@@ -1,12 +1,13 @@
 //+private
 package nbio
 
+import "base:runtime"
+
 import "core:container/queue"
 import "core:log"
 import "core:mem"
 import "core:net"
 import "core:os"
-import "core:runtime"
 import "core:time"
 
 import win "core:sys/windows"
@@ -489,9 +490,6 @@ FILE_SKIP_SET_EVENT_ON_HANDLE :: 0x2
 
 SO_UPDATE_ACCEPT_CONTEXT :: 28683
 
-WSA_IO_INCOMPLETE :: 996
-WSA_IO_PENDING :: 997
-
 WSAID_CONNECTEX :: win.GUID{0x25a207b9, 0xddf3, 0x4660, [8]win.BYTE{0x8e, 0xe9, 0x76, 0xe5, 0x8c, 0x74, 0x06, 0x3e}}
 
 LPFN_CONNECTEX :: #type proc "stdcall" (
@@ -516,7 +514,12 @@ LPFN_ACCEPTEX :: #type proc "stdcall" (
 ) -> win.BOOL
 
 wsa_err_incomplete :: proc(err: win.c_int) -> bool {
-	return err == win.WSAEWOULDBLOCK || err == WSA_IO_PENDING || err == WSA_IO_INCOMPLETE || err == win.WSAEALREADY
+	#partial switch win.System_Error(err) {
+	case .WSAEWOULDBLOCK, .IO_PENDING, .IO_INCOMPLETE, .WSAEALREADY:
+		return true
+	case:
+		return false
+	}
 }
 
 err_incomplete :: proc(err: win.DWORD) -> bool {
