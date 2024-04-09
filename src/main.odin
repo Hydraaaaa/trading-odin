@@ -1097,9 +1097,10 @@ GetVisibleCandles :: proc(candles : []Candle, timeframe : CandleTimeframe, times
 	{
 		endIndex = 0
 	}
-	else if endIndex > lastCandleIndex
+	else if endIndex > lastCandleIndex + 1
 	{
-		endIndex = lastCandleIndex
+		// +1 because slices exclude the max index
+		endIndex = lastCandleIndex + 1
 	}
 	
 	return candles[startIndex:endIndex], startIndex
