@@ -88,6 +88,5 @@ Timestamp_ToDayMonthYear :: proc(timestamp : i32) -> DayMonthYear
 
 Timestamp_ToDayOfWeek :: proc(timestamp : i32) -> DayOfWeek
 {
-    WEEK :: DAY * 7
-    return DayOfWeek(timestamp / WEEK % 7)
+    return DayOfWeek((timestamp + DAY * 4) / DAY % 7)
 }

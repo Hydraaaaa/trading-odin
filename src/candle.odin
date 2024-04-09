@@ -26,7 +26,7 @@ CandleTimeframe :: enum
 	HOUR_6,
 	HOUR_12,
 	DAY,
-	//WEEK,
+	WEEK,
 	//MONTH,
 	//QTR,
 	//YEAR,
@@ -208,6 +208,11 @@ Candle_FloorTimestamp :: proc(timestamp : i32, timeframe : CandleTimeframe) -> i
 
 	//	return timestamp - remainingTimestamp + monthlyIncrements[remainingIndex]
 	//}
+	
+	if timeframe == CandleTimeframe.WEEK
+	{
+		return timestamp - (timestamp + DAY * 4) % timeframeIncrements[timeframe]
+	}
 	
 	// Everything below months is uniform, and can be mathed
 	return timestamp - timestamp % timeframeIncrements[timeframe]

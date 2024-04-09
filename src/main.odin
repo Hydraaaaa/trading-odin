@@ -8,7 +8,7 @@ import "vendor:raylib"
 INITIAL_SCREEN_WIDTH :: 1440
 INITIAL_SCREEN_HEIGHT :: 720
 
-ZOOM_INDEX_COUNT :: 9
+ZOOM_INDEX_COUNT :: 10
 START_ZOOM_INDEX :: CandleTimeframe.DAY
 
 ZOOM_THRESHOLD :: 3
@@ -56,7 +56,7 @@ main :: proc()
 	{
 		prevTimeframe := CandleTimeframe.MINUTE
 		
-		for timeframe in CandleTimeframe.MINUTE_5 ..= CandleTimeframe.DAY
+		for timeframe in CandleTimeframe.MINUTE_5 ..= CandleTimeframe.WEEK
 		{
 			prevCandles := candleData[prevTimeframe].candles[:]
 
@@ -70,7 +70,7 @@ main :: proc()
 			reserve(&candleData[timeframe].candles, prevCandlesLen / timeframeDivisor + 1)
 			
 			// Separately calculate the subcandles of the first candle to handle the case where the candle timestamps aren't aligned
-			firstCandleComponentCount := timeframeDivisor - int((candleData[prevTimeframe].offset % candleTimeframeIncrements[timeframe]) / candleTimeframeIncrements[prevTimeframe])
+			firstCandleComponentCount := timeframeDivisor - int((candleData[prevTimeframe].offset - candleData[timeframe].offset) / candleTimeframeIncrements[prevTimeframe])
 			
 			start := 0
 			end := firstCandleComponentCount
@@ -86,6 +86,12 @@ main :: proc()
 				
 				start = end
 				end += timeframeDivisor
+			}
+			
+			// Create a final partial candle if applicable (like on weekly candles)
+			if start < prevCandlesLen
+			{
+				append(&candleData[timeframe].candles, Candle_Merge(prevCandles[start:prevCandlesLen]))
 			}
 			
 			prevTimeframe = timeframe
@@ -272,7 +278,7 @@ main :: proc()
 				i += 1
 			}
 
-			zoomIndex = CandleTimeframe.DAY
+			zoomIndex = CandleTimeframe.WEEK
 			
 			for int(zoomIndex) > 0 &&
 			    Timestamp_ToPixelX(Candle_IndexToDuration(0, zoomIndex - CandleTimeframe(1)), scaleData) > ZOOM_THRESHOLD
