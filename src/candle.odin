@@ -89,9 +89,7 @@ Candle_FloorTimestamp :: proc(timestamp : i32, timeframe : Timeframe) -> i32
 	return timestamp - timestamp % timeframeIncrements[timeframe]
 }
 
-Candle_Merge :: proc{Candle_Merge_New, Candle_Merge_Append}
-
-Candle_Merge_New :: proc(candles : []Candle) -> Candle
+Candle_Merge :: proc(candles : ..Candle) -> Candle
 {
 	newCandle := candles[0]
 	
@@ -113,29 +111,4 @@ Candle_Merge_New :: proc(candles : []Candle) -> Candle
 	newCandle.close = candles[len(candles) - 1].close
 	
 	return newCandle
-}
-
-// Candle's new close will be the last candle in
-Candle_Merge_Append :: proc(mainCandle : Candle, candles : []Candle) -> Candle
-{
-	mergedCandle := mainCandle
-	
-	for candle in candles
-	{
-		mergedCandle.volume += candle.volume
-
-		if candle.high > mergedCandle.high
-		{
-			mergedCandle.high = candle.high
-		}
-
-		if candle.low < mergedCandle.low
-		{
-			mergedCandle.low = candle.low
-		}
-	}
-	
-	mergedCandle.close = candles[len(candles) - 1].close
-	
-	return mergedCandle
 }

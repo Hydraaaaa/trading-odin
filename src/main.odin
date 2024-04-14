@@ -102,7 +102,7 @@ main :: proc()
 			
 			for end <= prevCandlesLen
 			{
-				append(&candleData[timeframe].candles, Candle_Merge(prevCandles[start:end]))
+				append(&candleData[timeframe].candles, Candle_Merge(..prevCandles[start:end]))
 				
 				start = end
 				end += timeframeDivisor
@@ -111,7 +111,7 @@ main :: proc()
 			// Create a final partial candle if applicable (like on weekly candles)
 			if start < prevCandlesLen
 			{
-				append(&candleData[timeframe].candles, Candle_Merge(prevCandles[start:prevCandlesLen]))
+				append(&candleData[timeframe].candles, Candle_Merge(..prevCandles[start:prevCandlesLen]))
 			}
 			
 			prevTimeframe = timeframe
@@ -157,7 +157,7 @@ main :: proc()
 			
 		for end <= dayCandlesLen
 		{
-			append(&candleData[Timeframe.MONTH].candles, Candle_Merge(dayCandles[start:end]))
+			append(&candleData[Timeframe.MONTH].candles, Candle_Merge(..dayCandles[start:end]))
 			
 			start = end
 		
@@ -174,7 +174,7 @@ main :: proc()
 		// Create a final partial candle when applicable
 		if start < dayCandlesLen
 		{
-			append(&candleData[Timeframe.MONTH].candles, Candle_Merge(dayCandles[start:dayCandlesLen]))
+			append(&candleData[Timeframe.MONTH].candles, Candle_Merge(..dayCandles[start:dayCandlesLen]))
 		}
 	}
 	
