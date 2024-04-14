@@ -68,6 +68,13 @@ main :: proc()
 	if dateToDownload != currentDate
 	{
 		downloadThread = thread.create_and_start_with_poly_data2(&dateToDownload, &downloadedCandles, DownloadDay)
+		
+		if len(candleData[Timeframe.MINUTE].candles) == 0
+		{
+			fmt.println("Waiting for first day's data to finish downloading before launching visual application")
+			thread.join(downloadThread)
+			append(&candleData[Timeframe.MINUTE].candles, ..downloadedCandles[:])
+		}
 	}
 
 	// Create higher timeframe candles ><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
