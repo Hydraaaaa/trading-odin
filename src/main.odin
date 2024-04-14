@@ -1059,8 +1059,7 @@ main :: proc()
 			if lastCandleIndex == visibleCandlesStartIndex + i32(len(visibleCandles)) - 1
 			{
 				posX := f32(Timestamp_ToPixelX(DayMonthYear_ToTimestamp(dateToDownload), scaleData) - cameraPosX)
-				posY := f32(Price_ToPixelY(candleData[zoomIndex].candles[lastCandleIndex].close, scaleData) - cameraPosY)
-
+				posY := f32(Price_ToPixelY(candleData[zoomIndex].candles[lastCandleIndex].close, scaleData) - cameraPosY) - MeasureTextEx(font, "W\x00", FONT_SIZE, 0).y / 2
 				output = fmt.bprint(text[:], "Downloading\x00")
 				DrawTextEx(font, strings.unsafe_string_to_cstring(output), {posX, posY}, FONT_SIZE, 0, WHITE)
 			}
