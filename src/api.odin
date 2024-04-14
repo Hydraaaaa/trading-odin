@@ -11,6 +11,7 @@ import "core:compress/gzip"
 import "core:mem"
 import "core:bufio"
 import "odin-http/client"
+import "core:thread"
 
 import "core:time"
 
@@ -28,7 +29,8 @@ MINUTE_CANDLES_FILE :: "historicalminutecandles.bin"
 BYBIT_ORIGIN_DATE :: DayMonthYear{25, 3, 2020}
 BYBIT_ORIGIN_MINUTE_TIMESTAMP :: 1_585_132_560 - TIMESTAMP_2010
 
-LoadHistoricalData :: proc() -> [dynamic]Candle
+// DayMonthYear is the next date to download
+LoadHistoricalData :: proc() -> ([dynamic]Candle, DayMonthYear)
 {
 	candles := make([dynamic]Candle, 0, 1440)
 
@@ -101,7 +103,7 @@ LoadHistoricalData :: proc() -> [dynamic]Candle
 		if !success
 		{
 			fmt.println("Reading existing candles file unsuccessful")
-			return nil
+			return nil, DayMonthYear{0,0,0}
 		}
 
 		localCandles := slice.reinterpret([]Candle, bytes)
@@ -114,37 +116,21 @@ LoadHistoricalData :: proc() -> [dynamic]Candle
 		}
 	}
 	
-	// Time is UTC, which matches Bybit's historical data upload time
-	//currentDate := Timestamp_ToDayMonthYear(i32(time.now()._nsec / i64(time.Second)))
-	//
-	//for dateToDownload != currentDate
-	//{
-	//	prevDateToDownload := dateToDownload
-
-	//	dateToDownload = DownloadDay(dateToDownload, &candles)
-	//	
-	//	if dateToDownload == prevDateToDownload
-	//	{
-	//		// Error has occurred, breaking the loop
-	//		break
-	//	}
-	//}
-	
-	return candles
+	return candles, dateToDownload
 }
 
 // Returns the next date to be downloaded in future
-DownloadDay :: proc(date : DayMonthYear, candles : ^[dynamic]Candle) -> DayMonthYear
+DownloadDay :: proc(date : ^DayMonthYear, candles : ^[dynamic]Candle)
 {
 	pathBuffer : [len("https://public.bybit.com/trading/BTCUSDT/BTCUSDTYYYY-MM-DD.csv.gz")]u8
 	
 	apiResponse, apiError := client.get(fmt.bprintf(pathBuffer[:], "https://public.bybit.com/trading/BTCUSDT/BTCUSDT%i-%2i-%2i.csv.gz", date.year, date.month, date.day))
 
-	fmt.printf("Downloading %2i/%2i/%i", date.day, date.month, date.year)
+	fmt.printfln("Downloading %2i/%2i/%i", date.day, date.month, date.year)
 	if apiError != nil
 	{
-		fmt.printf("Request failed: %s", apiError)
-		return date
+		fmt.println("Request failed: ", apiError)
+		return
 	}
 
 	defer client.response_destroy(&apiResponse)
@@ -153,8 +139,8 @@ DownloadDay :: proc(date : DayMonthYear, candles : ^[dynamic]Candle) -> DayMonth
 	
 	if responseBodyError != nil
 	{
-		fmt.printf("Error retrieving response body: %s", responseBodyError)
-		return date
+		fmt.println("Error retrieving response body: ", responseBodyError)
+		return
 	}
 
 	defer client.body_destroy(responseBody, responseBodyWasAllocated)
@@ -260,12 +246,12 @@ DownloadDay :: proc(date : DayMonthYear, candles : ^[dynamic]Candle) -> DayMonth
 	integer, err = os.read(historicalTradesFile, tradeBuffer[:])
 	previousDayLastTrade = (^Trade)(&tradeBuffer[0])^
 	
-	if date == BYBIT_ORIGIN_DATE
+	if date^ == BYBIT_ORIGIN_DATE
 	{
 		firstTrade = orderedTrades[0]
 	}
 
-	fmt.println(", Appending", len(orderedTrades), "trades to local file")
+	fmt.println("Appending", len(orderedTrades), "trades to local file")
 	
 	_, writeLocalFileError := os.write(historicalTradesFile, slice.to_bytes(orderedTrades[:]))
 	
@@ -277,7 +263,7 @@ DownloadDay :: proc(date : DayMonthYear, candles : ^[dynamic]Candle) -> DayMonth
 	os.seek(historicalTradesFile, 0, os.SEEK_SET)
 		
 	// File stores the next date to be downloaded in future
-	nextDate := DayMonthYear_AddDays(date, 1)
+	nextDate := DayMonthYear_AddDays(date^, 1)
 	
 	os.write(historicalTradesFile, mem.any_to_bytes(nextDate.day))
 	os.write(historicalTradesFile, mem.any_to_bytes(nextDate.month))
@@ -289,7 +275,7 @@ DownloadDay :: proc(date : DayMonthYear, candles : ^[dynamic]Candle) -> DayMonth
 	
 	currentCandleTimestamp : i32
 	
-	if date == BYBIT_ORIGIN_DATE
+	if date^ == BYBIT_ORIGIN_DATE
 	{
 		// On the first day, the first trade happens later than 00:00:00 UTC, and so the first candle does as well
 		currentCandleTimestamp = BYBIT_ORIGIN_MINUTE_TIMESTAMP
@@ -299,10 +285,9 @@ DownloadDay :: proc(date : DayMonthYear, candles : ^[dynamic]Candle) -> DayMonth
 	}
 	else
 	{
-		currentCandleTimestamp = DayMonthYear_ToTimestamp(date)
+		currentCandleTimestamp = DayMonthYear_ToTimestamp(date^)
 	}
 	
-
 	candle : Candle
 
 	// First candle will open at the close of the previous candle
@@ -351,7 +336,7 @@ DownloadDay :: proc(date : DayMonthYear, candles : ^[dynamic]Candle) -> DayMonth
 		candle.volume += trade.volume
 	}
 	
-	nextDayTimestamp := DayMonthYear_ToTimestamp(date)
+	nextDayTimestamp := DayMonthYear_ToTimestamp(nextDate)
 
 	// Close final candle
 	// This for is to handle the case where no new trades have been made during the final minute(s) of the day
@@ -369,7 +354,7 @@ DownloadDay :: proc(date : DayMonthYear, candles : ^[dynamic]Candle) -> DayMonth
 
 	// Append to local historical candles file <><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
 
-	if candlesAdded != 1440 && date != BYBIT_ORIGIN_DATE
+	if candlesAdded != 1440 && date^ != BYBIT_ORIGIN_DATE
 	{
 		// This isn't necessarily a problem for the first day of data, given that trades didn't begin at 00:00:00 on that day
 		fmt.println("PROBLEM!!! Added", candlesAdded, "candles to local file, should be 1440")
@@ -380,7 +365,6 @@ DownloadDay :: proc(date : DayMonthYear, candles : ^[dynamic]Candle) -> DayMonth
 
 	os.seek(historicalCandlesFile, 0, os.SEEK_END)
 	
-	previousDayLastTrade = orderedTrades[len(orderedTrades) - 1]
 	_, writeLocalFileError = os.write(historicalCandlesFile, slice.to_bytes(candles[len(candles) - candlesAdded:]))
 	
 	if writeLocalFileError != 0
@@ -389,8 +373,6 @@ DownloadDay :: proc(date : DayMonthYear, candles : ^[dynamic]Candle) -> DayMonth
 	}
 
 	os.close(historicalCandlesFile)
-
-	previousDayLastTrade = downloadedTrades[len(downloadedTrades) - 1]
 	
-	return nextDate
+	date^ = nextDate
 }

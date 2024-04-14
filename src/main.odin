@@ -3,6 +3,8 @@ package main
 import "core:fmt"
 import "core:strings"
 import "core:math"
+import "core:thread"
+import "core:time"
 import "vendor:raylib"
 
 INITIAL_SCREEN_WIDTH :: 1440
@@ -48,11 +50,25 @@ main :: proc()
 	font := LoadFontEx("roboto-bold.ttf", FONT_SIZE, nil, 0)
 	
 	candleData : [TIMEFRAME_COUNT]CandleList
-	candleData[Timeframe.MINUTE].candles = LoadHistoricalData()
+
+	dateToDownload : DayMonthYear = ---
+
+	candleData[Timeframe.MINUTE].candles, dateToDownload = LoadHistoricalData()
 	candleData[Timeframe.MINUTE].offset = BYBIT_ORIGIN_MINUTE_TIMESTAMP
 	defer delete(candleData[Timeframe.MINUTE].candles)
 	
 	candleTimeframeIncrements := CANDLE_TIMEFRAME_INCREMENTS
+
+	// Time is UTC, which matches Bybit's historical data upload time
+	currentDate := Timestamp_ToDayMonthYear(i32(time.now()._nsec / i64(time.Second)))
+	
+	downloadThread : ^thread.Thread
+	downloadedCandles : [dynamic]Candle
+	
+	if dateToDownload != currentDate
+	{
+		downloadThread = thread.create_and_start_with_poly_data2(&dateToDownload, &downloadedCandles, DownloadDay)
+	}
 
 	// Create higher timeframe candles ><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
 	{
@@ -160,8 +176,6 @@ main :: proc()
 		{
 			append(&candleData[Timeframe.MONTH].candles, Candle_Merge(dayCandles[start:dayCandlesLen]))
 		}
-		
-		fmt.println(len(candleData[Timeframe.MONTH].candles))
 	}
 	
 	scaleData : ScaleData
@@ -355,6 +369,20 @@ main :: proc()
 			// Re-add zoom post update
 			cameraPosX = i32(cameraCenterX / scaleData.zoom - f64(screenWidth) / 2)
 			cameraPosY = i32(cameraCenterY / scaleData.zoom - f64(screenHeight) / 2)
+		}
+		
+		// Check download thread
+		if thread.is_done(downloadThread)
+		{
+			thread.destroy(downloadThread)
+			
+			// TODO: Merge candles, simplified version of candle creation, can hardcode week/month
+			// Candles_Merge(existingCandle, newCandles[:])
+	
+			if dateToDownload != currentDate
+			{
+				downloadThread = thread.create_and_start_with_poly_data2(&dateToDownload, &downloadedCandles, DownloadDay)
+			}
 		}
 
 		// Update visibleCandles
@@ -1020,6 +1048,23 @@ main :: proc()
 
 		candleCenterOffset = f32(CandleList_IndexToWidth(candleData[zoomIndex], lowestCandleIndex, scaleData)) / 2 - 0.5
 		DrawTextEx(font, strings.unsafe_string_to_cstring(output), {labelPosX, labelPosY}, FONT_SIZE, 0, WHITE)
+
+		// "Downloading" text
+		if !thread.is_done(downloadThread)
+		{
+			lastCandleIndex := i32(len(candleData[zoomIndex].candles)) - 1
+			lastCandleTimestamp := CandleList_IndexToTimestamp(candleData[zoomIndex], lastCandleIndex)
+
+			// If last candle is visible
+			if lastCandleIndex == visibleCandlesStartIndex + i32(len(visibleCandles)) - 1
+			{
+				posX := f32(Timestamp_ToPixelX(DayMonthYear_ToTimestamp(dateToDownload), scaleData) - cameraPosX)
+				posY := f32(Price_ToPixelY(candleData[zoomIndex].candles[lastCandleIndex].close, scaleData) - cameraPosY)
+
+				output = fmt.bprint(text[:], "Downloading\x00")
+				DrawTextEx(font, strings.unsafe_string_to_cstring(output), {posX, posY}, FONT_SIZE, 0, WHITE)
+			}
+		}
 
 		// FPS
 		output = fmt.bprintf(text[:], "%i\x00", GetFPS())
