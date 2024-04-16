@@ -14,7 +14,8 @@ INITIAL_SCREEN_HEIGHT :: 720
 START_ZOOM_INDEX :: Timeframe.DAY
 
 ZOOM_THRESHOLD :: 3
-ZOOM_INCREMENT :: 1.07
+HORIZONTAL_ZOOM_INCREMENT :: 1.1
+VERTICAL_ZOOM_INCREMENT :: 1.06
 
 HORIZONTAL_LABEL_PADDING :: 3
 VERTICAL_LABEL_PADDING :: HORIZONTAL_LABEL_PADDING - 2
@@ -194,7 +195,8 @@ main :: proc()
 	
 	scaleData : ScaleData
 
-	scaleData.zoom = 1
+	scaleData.horizontalZoom = 1
+	scaleData.verticalZoom = 1
 	scaleData.horizontalScale = f64(CandleList_IndexToDuration(candleData[START_ZOOM_INDEX], 0) / (ZOOM_THRESHOLD * 2))
 	scaleData.logScale = true
 
@@ -353,22 +355,25 @@ main :: proc()
 			zoomLevel -= int(GetMouseWheelMove())
 
 			// Remove zoom from screen space as we adjust it
-			cameraCenterX : f64 = (f64(cameraPosX) + f64(screenWidth) / 2) * scaleData.zoom
-			cameraCenterY : f64 = (f64(cameraPosY) + f64(screenHeight) / 2) * scaleData.zoom
+			cameraCenterX : f64 = (f64(cameraPosX) + f64(screenWidth) / 2) * scaleData.horizontalZoom
+			cameraCenterY : f64 = (f64(cameraPosY) + f64(screenHeight) / 2) * scaleData.verticalZoom
 
-			scaleData.zoom = 1
+			scaleData.horizontalZoom = 1
+			scaleData.verticalZoom = 1
 
 			i := zoomLevel
 
 			for i > 0
 			{
-				scaleData.zoom *= ZOOM_INCREMENT
+				scaleData.horizontalZoom *= HORIZONTAL_ZOOM_INCREMENT
+				scaleData.verticalZoom *= VERTICAL_ZOOM_INCREMENT
 				i -= 1
 			}
 
 			for i < 0
 			{
-				scaleData.zoom /= ZOOM_INCREMENT
+				scaleData.horizontalZoom /= HORIZONTAL_ZOOM_INCREMENT
+				scaleData.verticalZoom /= VERTICAL_ZOOM_INCREMENT
 				i += 1
 			}
 
@@ -381,8 +386,8 @@ main :: proc()
 			}
 
 			// Re-add zoom post update
-			cameraPosX = i32(cameraCenterX / scaleData.zoom - f64(screenWidth) / 2)
-			cameraPosY = i32(cameraCenterY / scaleData.zoom - f64(screenHeight) / 2)
+			cameraPosX = i32(cameraCenterX / scaleData.horizontalZoom - f64(screenWidth) / 2)
+			cameraPosY = i32(cameraCenterY / scaleData.verticalZoom - f64(screenHeight) / 2)
 		}
 		
 		// Check download thread

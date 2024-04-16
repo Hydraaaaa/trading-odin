@@ -35,12 +35,12 @@ DAYS_PER_MONTH : [48]int = \
 
 Timestamp_ToPixelX :: proc(timestamp : i32, scaleData : ScaleData) -> i32
 {
-	return i32(f64(timestamp) / (scaleData.horizontalScale * scaleData.zoom))
+	return i32(f64(timestamp) / (scaleData.horizontalScale * scaleData.horizontalZoom))
 }
 
 Timestamp_FromPixelX :: proc(pixelX : i32, scaleData : ScaleData) -> i32
 {
-	return i32(f64(pixelX) * scaleData.horizontalScale * scaleData.zoom)
+	return i32(f64(pixelX) * scaleData.horizontalScale * scaleData.horizontalZoom)
 }
 
 Timestamp_ToDayMonthYear :: proc(timestamp : i32) -> DayMonthYear
