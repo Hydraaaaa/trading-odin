@@ -61,7 +61,7 @@ main :: proc()
 	candleTimeframeIncrements := CANDLE_TIMEFRAME_INCREMENTS
 
 	// Time is UTC, which matches Bybit's historical data upload time
-	currentDate := Timestamp_ToDayMonthYear(i32(time.now()._nsec / i64(time.Second)))
+	currentDate := Timestamp_ToDayMonthYear(i32(time.now()._nsec / i64(time.Second)) - TIMESTAMP_2010)
 	
 	downloadThread : ^thread.Thread
 	downloadedCandles : [1440]Candle
@@ -392,67 +392,75 @@ main :: proc()
 			{
 				thread.destroy(downloadThread)
 				
-				prevTimeframe := Timeframe.MINUTE
-				prevMinuteCandleCount := len(candleData[Timeframe.MINUTE].candles)
-				
-				append(&candleData[Timeframe.MINUTE].candles, ..downloadedCandles[:])
-
-				prevCandles := candleData[Timeframe.MINUTE].candles[prevMinuteCandleCount:]
-				
-				for timeframe in Timeframe.MINUTE_5 ..= Timeframe.DAY
-				{
-					prevCandlesLen := len(prevCandles)
-					
-					startingCandlesLen := len(candleData[timeframe].candles)
-					
-					timeframeDivisor := int(candleTimeframeIncrements[timeframe] / candleTimeframeIncrements[prevTimeframe])
-					
-					start := 0
-					end := timeframeDivisor
-					
-					for end <= prevCandlesLen
-					{
-						append(&candleData[timeframe].candles, Candle_Merge(..prevCandles[start:end]))
-						
-						start = end
-						end += timeframeDivisor
-					}
-					
-					prevTimeframe = timeframe
-					prevCandles = candleData[timeframe].candles[startingCandlesLen:]
-				}
-				
-				newDayCandle := slice.last(candleData[Timeframe.DAY].candles[:])
-				
-				// Tuesday because dateToDownload has already been shifted forward one day
-				if Timestamp_ToDayOfWeek(DayMonthYear_ToTimestamp(dateToDownload)) == .TUESDAY
-				{
-					append(&candleData[Timeframe.WEEK].candles, newDayCandle)
-				}
-				else
-				{
-					weekCandleIndex := len(candleData[Timeframe.WEEK].candles) - 1
-					candleData[Timeframe.WEEK].candles[weekCandleIndex] = Candle_Merge(candleData[Timeframe.WEEK].candles[weekCandleIndex], newDayCandle)
-				}
-				
-				// 2nd day of month because dateToDownload has already been shifted forward one day
-				if dateToDownload.day == 2
-				{
-					append(&candleData[Timeframe.MONTH].candles, newDayCandle)
-				}
-				else
-				{
-					monthCandleIndex := len(candleData[Timeframe.MONTH].candles) - 1
-					candleData[Timeframe.MONTH].candles[monthCandleIndex] = Candle_Merge(candleData[Timeframe.MONTH].candles[monthCandleIndex], newDayCandle)
-				}
-		
-				if dateToDownload != currentDate
-				{
-					downloadThread = thread.create_and_start_with_poly_data3(&dateToDownload, &downloadedCandles, &downloadedCandlesLen, DownloadDay)
-				}
-				else
+				// 404 Not Found
+				if downloadedCandlesLen == -1
 				{
 					downloading = false
+				}
+				else
+				{
+					prevTimeframe := Timeframe.MINUTE
+					prevMinuteCandleCount := len(candleData[Timeframe.MINUTE].candles)
+					
+					append(&candleData[Timeframe.MINUTE].candles, ..downloadedCandles[:])
+
+					prevCandles := candleData[Timeframe.MINUTE].candles[prevMinuteCandleCount:]
+					
+					for timeframe in Timeframe.MINUTE_5 ..= Timeframe.DAY
+					{
+						prevCandlesLen := len(prevCandles)
+						
+						startingCandlesLen := len(candleData[timeframe].candles)
+						
+						timeframeDivisor := int(candleTimeframeIncrements[timeframe] / candleTimeframeIncrements[prevTimeframe])
+						
+						start := 0
+						end := timeframeDivisor
+						
+						for end <= prevCandlesLen
+						{
+							append(&candleData[timeframe].candles, Candle_Merge(..prevCandles[start:end]))
+							
+							start = end
+							end += timeframeDivisor
+						}
+						
+						prevTimeframe = timeframe
+						prevCandles = candleData[timeframe].candles[startingCandlesLen:]
+					}
+					
+					newDayCandle := slice.last(candleData[Timeframe.DAY].candles[:])
+					
+					// Tuesday because dateToDownload has already been shifted forward one day
+					if Timestamp_ToDayOfWeek(DayMonthYear_ToTimestamp(dateToDownload)) == .TUESDAY
+					{
+						append(&candleData[Timeframe.WEEK].candles, newDayCandle)
+					}
+					else
+					{
+						weekCandleIndex := len(candleData[Timeframe.WEEK].candles) - 1
+						candleData[Timeframe.WEEK].candles[weekCandleIndex] = Candle_Merge(candleData[Timeframe.WEEK].candles[weekCandleIndex], newDayCandle)
+					}
+					
+					// 2nd day of month because dateToDownload has already been shifted forward one day
+					if dateToDownload.day == 2
+					{
+						append(&candleData[Timeframe.MONTH].candles, newDayCandle)
+					}
+					else
+					{
+						monthCandleIndex := len(candleData[Timeframe.MONTH].candles) - 1
+						candleData[Timeframe.MONTH].candles[monthCandleIndex] = Candle_Merge(candleData[Timeframe.MONTH].candles[monthCandleIndex], newDayCandle)
+					}
+			
+					if dateToDownload != currentDate
+					{
+						downloadThread = thread.create_and_start_with_poly_data3(&dateToDownload, &downloadedCandles, &downloadedCandlesLen, DownloadDay)
+					}
+					else
+					{
+						downloading = false
+					}
 				}
 			}
 		}

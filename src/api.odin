@@ -142,6 +142,14 @@ DownloadDay :: proc(date : ^DayMonthYear, candles : ^[1440]Candle, candlesLen : 
 		fmt.println("Error retrieving response body: ", responseBodyError)
 		return
 	}
+	
+	// 404 Not Found
+	if responseBody.(client.Body_Plain)[0] == '<'
+	{
+		fmt.println("DownloadDay: 404 Not Found")
+		candlesLen^ = -1
+		return
+	}
 
 	defer client.body_destroy(responseBody, responseBodyWasAllocated)
 
