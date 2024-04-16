@@ -584,6 +584,11 @@ main :: proc()
 			
 			currentMagnitude : f32 = 1_000_000_000
 			
+			if priceDifference > 1_000_000_000
+			{
+				priceDifference = 1_000_000_000
+			}
+			
 			for currentMagnitude > priceDifference
 			{
 				currentMagnitude *= 0.1
@@ -616,9 +621,14 @@ main :: proc()
 				currentPrice := Price_FromPixelY(prevPixel + priceLabelSpacing, scaleData)
 				priceDifference = prevPrice - currentPrice
 				
+				// Price_FromPixelY can sometimes return +inf, which crashes the program without this break
+				if currentPrice > 1_000_000_000
+				{
+					break
+				}
+
 				for currentMagnitude > priceDifference
 				{
-					// TODO: Infinite loop upon enough zoom out
 					currentMagnitude *= 0.1
 				}
 				
@@ -1153,8 +1163,11 @@ main :: proc()
 		DrawTextEx(font, strings.unsafe_string_to_cstring(output), {0, FONT_SIZE}, FONT_SIZE, 0, WHITE)
 
 		// Current Candle Price
-		output = fmt.bprintf(text[:], "%.2f, %.2f, %.2f, %.2f\x00", candleData[zoomIndex].candles[cursorCandleIndex].open, candleData[zoomIndex].candles[cursorCandleIndex].high, candleData[zoomIndex].candles[cursorCandleIndex].low, candleData[zoomIndex].candles[cursorCandleIndex].close)
-		DrawTextEx(font, strings.unsafe_string_to_cstring(output), {0, FONT_SIZE * 2}, FONT_SIZE, 0, WHITE)
+		if len(visibleCandles) > 0
+		{
+			output = fmt.bprintf(text[:], "%.2f, %.2f, %.2f, %.2f\x00", candleData[zoomIndex].candles[cursorCandleIndex].open, candleData[zoomIndex].candles[cursorCandleIndex].high, candleData[zoomIndex].candles[cursorCandleIndex].low, candleData[zoomIndex].candles[cursorCandleIndex].close)
+			DrawTextEx(font, strings.unsafe_string_to_cstring(output), {0, FONT_SIZE * 2}, FONT_SIZE, 0, WHITE)
+		}
 
 		// Current Candle Price
 		cursorTimestamp := CandleList_IndexToTimestamp(candleData[zoomIndex], cursorCandleIndex)

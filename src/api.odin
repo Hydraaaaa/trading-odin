@@ -54,8 +54,6 @@ LoadHistoricalData :: proc() -> ([dynamic]Candle, DayMonthYear)
 		os.write(historicalTradesFile, mem.any_to_bytes(dateToDownload.day))
 		os.write(historicalTradesFile, mem.any_to_bytes(dateToDownload.month))
 		os.write(historicalTradesFile, mem.any_to_bytes(dateToDownload.year))
-
-		fmt.println("New trades file")
 	}
 	else
 	{
@@ -70,8 +68,6 @@ LoadHistoricalData :: proc() -> ([dynamic]Candle, DayMonthYear)
 		dateToDownload.month = (^int)(&dateBytes[size_of(dateToDownload.day)])^
 		dateToDownload.year = (^int)(&dateBytes[size_of(dateToDownload.day) + size_of(dateToDownload.month)])^
 		
-		fmt.printf("Existing trades file, next date to download is: %2i/%2i/%i\n", dateToDownload.day, dateToDownload.month, dateToDownload.year)
-	
 		tradeBuffer : [size_of(Trade)]u8
 		integer, err = os.read(historicalTradesFile, tradeBuffer[:])
 		firstTrade = (^Trade)(&tradeBuffer[0])^
@@ -89,15 +85,11 @@ LoadHistoricalData :: proc() -> ([dynamic]Candle, DayMonthYear)
 
 	if !os.is_file(MINUTE_CANDLES_FILE)
 	{
-		fmt.println("New candles file")
-
 		historicalCandlesFile, ok = os.open(MINUTE_CANDLES_FILE, os.O_CREATE)
 		os.close(historicalCandlesFile)
 	}
 	else
 	{
-		fmt.println("Existing candles file")
-		
 		bytes, success := os.read_entire_file_from_filename(MINUTE_CANDLES_FILE)
 		
 		if !success
