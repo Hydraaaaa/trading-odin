@@ -1129,7 +1129,7 @@ main :: proc()
 		DrawTextEx(font, strings.unsafe_string_to_cstring(output), {labelPosX, labelPosY}, FONT_SIZE, 0, WHITE)
 
 		// "Downloading" text
-		if !thread.is_done(downloadThread)
+		if downloading
 		{
 			lastCandleIndex := i32(len(candleData[zoomIndex].candles)) - 1
 			lastCandleTimestamp := CandleList_IndexToTimestamp(candleData[zoomIndex], lastCandleIndex)
