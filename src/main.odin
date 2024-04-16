@@ -5,6 +5,7 @@ import "core:strings"
 import "core:math"
 import "core:thread"
 import "core:time"
+import "core:slice"
 import "vendor:raylib"
 
 INITIAL_SCREEN_WIDTH :: 1440
@@ -63,17 +64,23 @@ main :: proc()
 	currentDate := Timestamp_ToDayMonthYear(i32(time.now()._nsec / i64(time.Second)))
 	
 	downloadThread : ^thread.Thread
-	downloadedCandles : [dynamic]Candle
+	downloadedCandles : [1440]Candle
+	downloadedCandlesLen : int // This should only not be 1440 for the very first day of data
+	downloading := false
 	
 	if dateToDownload != currentDate
 	{
-		downloadThread = thread.create_and_start_with_poly_data2(&dateToDownload, &downloadedCandles, DownloadDay)
-		
+		downloadThread = thread.create_and_start_with_poly_data3(&dateToDownload, &downloadedCandles, &downloadedCandlesLen, DownloadDay)
+
+		downloading = true
+
 		if len(candleData[Timeframe.MINUTE].candles) == 0
 		{
 			fmt.println("Waiting for first day's data to finish downloading before launching visual application")
 			thread.join(downloadThread)
-			append(&candleData[Timeframe.MINUTE].candles, ..downloadedCandles[:])
+			append(&candleData[Timeframe.MINUTE].candles, ..downloadedCandles[:downloadedCandlesLen])
+			thread.destroy(downloadThread)
+			downloadThread = thread.create_and_start_with_poly_data3(&dateToDownload, &downloadedCandles, &downloadedCandlesLen, DownloadDay)
 		}
 	}
 
@@ -379,16 +386,74 @@ main :: proc()
 		}
 		
 		// Check download thread
-		if thread.is_done(downloadThread)
+		if downloading
 		{
-			thread.destroy(downloadThread)
-			
-			// TODO: Merge candles, simplified version of candle creation, can hardcode week/month
-			// Candles_Merge(existingCandle, newCandles[:])
-	
-			if dateToDownload != currentDate
+			if thread.is_done(downloadThread)
 			{
-				downloadThread = thread.create_and_start_with_poly_data2(&dateToDownload, &downloadedCandles, DownloadDay)
+				thread.destroy(downloadThread)
+				
+				prevTimeframe := Timeframe.MINUTE
+				prevMinuteCandleCount := len(candleData[Timeframe.MINUTE].candles)
+				
+				append(&candleData[Timeframe.MINUTE].candles, ..downloadedCandles[:])
+
+				prevCandles := candleData[Timeframe.MINUTE].candles[prevMinuteCandleCount:]
+				
+				for timeframe in Timeframe.MINUTE_5 ..= Timeframe.DAY
+				{
+					prevCandlesLen := len(prevCandles)
+					
+					startingCandlesLen := len(candleData[timeframe].candles)
+					
+					timeframeDivisor := int(candleTimeframeIncrements[timeframe] / candleTimeframeIncrements[prevTimeframe])
+					
+					start := 0
+					end := timeframeDivisor
+					
+					for end <= prevCandlesLen
+					{
+						append(&candleData[timeframe].candles, Candle_Merge(..prevCandles[start:end]))
+						
+						start = end
+						end += timeframeDivisor
+					}
+					
+					prevTimeframe = timeframe
+					prevCandles = candleData[timeframe].candles[startingCandlesLen:]
+				}
+				
+				newDayCandle := slice.last(candleData[Timeframe.DAY].candles[:])
+				
+				// Tuesday because dateToDownload has already been shifted forward one day
+				if Timestamp_ToDayOfWeek(DayMonthYear_ToTimestamp(dateToDownload)) == .TUESDAY
+				{
+					append(&candleData[Timeframe.WEEK].candles, newDayCandle)
+				}
+				else
+				{
+					weekCandleIndex := len(candleData[Timeframe.WEEK].candles) - 1
+					candleData[Timeframe.WEEK].candles[weekCandleIndex] = Candle_Merge(candleData[Timeframe.WEEK].candles[weekCandleIndex], newDayCandle)
+				}
+				
+				// 2nd day of month because dateToDownload has already been shifted forward one day
+				if dateToDownload.day == 2
+				{
+					append(&candleData[Timeframe.MONTH].candles, newDayCandle)
+				}
+				else
+				{
+					monthCandleIndex := len(candleData[Timeframe.MONTH].candles) - 1
+					candleData[Timeframe.MONTH].candles[monthCandleIndex] = Candle_Merge(candleData[Timeframe.MONTH].candles[monthCandleIndex], newDayCandle)
+				}
+		
+				if dateToDownload != currentDate
+				{
+					downloadThread = thread.create_and_start_with_poly_data3(&dateToDownload, &downloadedCandles, &downloadedCandlesLen, DownloadDay)
+				}
+				else
+				{
+					downloading = false
+				}
 			}
 		}
 
@@ -409,7 +474,6 @@ main :: proc()
 			// As we are doing the opposite conversion, the mouse will always be less than or equal to the candles
 			timestamp : i32 = Timestamp_FromPixelX(GetMouseX() + cameraPosX + 1, scaleData)
 
-			//if i32(len(visibleCandles) - 1) * candleTimeframeIncrements[zoomIndex] < timestamp @@@
 			if CandleList_IndexToTimestamp(candleData[zoomIndex], i32(len(visibleCandles)) + visibleCandlesStartIndex - 1) < timestamp
 			{
 				cursorCandleIndex = i32(len(visibleCandles)) - 1 + visibleCandlesStartIndex
@@ -590,7 +654,7 @@ main :: proc()
 			priceIncrementIndex := 0
 			
 			// Can we math this out?
-			for i32(pixelPriceIncrement * f32(priceIncrementMultiplier) * priceIncrements[len(priceIncrements) - 1]) < priceLabelSpacing
+			for i32(pixelPriceIncrement * f32(priceIncrementMultiplier) * slice.last(priceIncrements[:])) < priceLabelSpacing
 			{
 				priceIncrementMultiplier *= 10				
 			}
@@ -1065,7 +1129,7 @@ main :: proc()
 			// If last candle is visible
 			if lastCandleIndex == visibleCandlesStartIndex + i32(len(visibleCandles)) - 1
 			{
-				posX := f32(Timestamp_ToPixelX(DayMonthYear_ToTimestamp(dateToDownload), scaleData) - cameraPosX)
+				posX := f32(Timestamp_ToPixelX(DayMonthYear_ToTimestamp(dateToDownload), scaleData) - cameraPosX) + 2
 				posY := f32(Price_ToPixelY(candleData[zoomIndex].candles[lastCandleIndex].close, scaleData) - cameraPosY) - MeasureTextEx(font, "W\x00", FONT_SIZE, 0).y / 2
 				output = fmt.bprint(text[:], "Downloading\x00")
 				DrawTextEx(font, strings.unsafe_string_to_cstring(output), {posX, posY}, FONT_SIZE, 0, WHITE)

@@ -120,7 +120,7 @@ LoadHistoricalData :: proc() -> ([dynamic]Candle, DayMonthYear)
 }
 
 // Returns the next date to be downloaded in future
-DownloadDay :: proc(date : ^DayMonthYear, candles : ^[dynamic]Candle)
+DownloadDay :: proc(date : ^DayMonthYear, candles : ^[1440]Candle, candlesLen : ^int)
 {
 	pathBuffer : [len("https://public.bybit.com/trading/BTCUSDT/BTCUSDTYYYY-MM-DD.csv.gz")]u8
 	
@@ -308,8 +308,8 @@ DownloadDay :: proc(date : ^DayMonthYear, candles : ^[dynamic]Candle)
 		{
 			closePrice := candle.close
 			currentCandleTimestamp += 60
+			candles[candlesAdded] = candle
 			candlesAdded += 1
-			append(candles, candle)
 			candle.open = closePrice
 			candle.high = closePrice
 			candle.low = closePrice
@@ -343,8 +343,8 @@ DownloadDay :: proc(date : ^DayMonthYear, candles : ^[dynamic]Candle)
 	// Will create empty candles up until the new day
 	for currentCandleTimestamp < nextDayTimestamp
 	{
+		candles[candlesAdded] = candle
 		candlesAdded += 1
-		append(candles, candle)
 		currentCandleTimestamp += 60
 		candle.open = candle.close
 		candle.high = candle.close
@@ -365,7 +365,7 @@ DownloadDay :: proc(date : ^DayMonthYear, candles : ^[dynamic]Candle)
 
 	os.seek(historicalCandlesFile, 0, os.SEEK_END)
 	
-	_, writeLocalFileError = os.write(historicalCandlesFile, slice.to_bytes(candles[len(candles) - candlesAdded:]))
+	_, writeLocalFileError = os.write(historicalCandlesFile, slice.to_bytes(candles[:candlesAdded]))
 	
 	if writeLocalFileError != 0
 	{
@@ -374,5 +374,6 @@ DownloadDay :: proc(date : ^DayMonthYear, candles : ^[dynamic]Candle)
 
 	os.close(historicalCandlesFile)
 	
+	candlesLen^ = candlesAdded
 	date^ = nextDate
 }
