@@ -233,6 +233,7 @@ main :: proc()
 	highestCandleIndex += visibleCandlesStartIndex
 	lowestCandleIndex += visibleCandlesStartIndex
 	cursorCandleIndex : i32
+	cursorCandle : Candle
 
 	initialVerticalScale : f64
 
@@ -490,10 +491,12 @@ main :: proc()
 			if CandleList_IndexToTimestamp(candleData[zoomIndex], i32(len(visibleCandles)) + visibleCandlesStartIndex - 1) < timestamp
 			{
 				cursorCandleIndex = i32(len(visibleCandles)) - 1 + visibleCandlesStartIndex
+				cursorCandle = candleData[zoomIndex].candles[cursorCandleIndex]
 			}
 			else
 			{
 				cursorCandleIndex = CandleList_TimestampToIndex(candleData[zoomIndex], timestamp)
+				cursorCandle = candleData[zoomIndex].candles[cursorCandleIndex]
 			}
 		}
 
@@ -1080,23 +1083,108 @@ main :: proc()
 			}
 		}
 
-		mouseY := GetMouseY();
+		// Snap cursor to nearest OHLC value
+		mouseY := GetMouseY()
+		mouseSnapPrice : f32
+		isSnapped := false
 
+		{
+			SNAP_PIXELS :: 32
+
+			high := Price_ToPixelY(cursorCandle.high, scaleData) - cameraPosY
+			low := Price_ToPixelY(cursorCandle.low, scaleData) - cameraPosY
+
+			midHigh : i32
+			midLow : i32
+			midHighPrice : f32
+			midLowPrice : f32
+			
+			if cursorCandle.open > cursorCandle.close
+			{
+				midHigh = Price_ToPixelY(cursorCandle.open, scaleData) - cameraPosY
+				midLow = Price_ToPixelY(cursorCandle.close, scaleData) - cameraPosY
+				midHighPrice = cursorCandle.open
+				midLowPrice = cursorCandle.close
+			}
+			else
+			{
+				midHigh = Price_ToPixelY(cursorCandle.close, scaleData) - cameraPosY
+				midLow = Price_ToPixelY(cursorCandle.open, scaleData) - cameraPosY
+				midHighPrice = cursorCandle.close
+				midLowPrice = cursorCandle.open
+			}
+
+			highestSnap := high - SNAP_PIXELS
+			lowestSnap := low + SNAP_PIXELS			
+			
+			if mouseY >= highestSnap &&
+			   mouseY <= lowestSnap 
+			{
+				// Midpoints (in pixels)
+				highMidHigh := (high + midHigh) / 2
+				midHighMidLow := (midHigh + midLow) / 2
+				midLowLow := (midLow + low) / 2
+				
+				if mouseY < highMidHigh
+				{
+					mouseY = high
+					mouseSnapPrice = cursorCandle.high
+				}
+				else if mouseY < midHighMidLow
+				{
+					mouseY = midHigh
+					mouseSnapPrice = midHighPrice
+				}
+				else if mouseY < midLowLow
+				{
+					mouseY = midLow
+					mouseSnapPrice = midLowPrice
+				}
+				else
+				{
+					mouseY = low
+					mouseSnapPrice = cursorCandle.low
+				}
+				
+				isSnapped = true
+			}
+		}
+
+		// Draw Crosshair
 		crosshairColor := WHITE
 		crosshairColor.a = 127
 
-		// Draw Crosshair
-		for i : i32 = 0; i < screenWidth; i += 2
+		for i : i32 = 0; i < screenWidth; i += 3
 		{
-			DrawPixel(i, GetMouseY(), crosshairColor)
+			DrawPixel(i, mouseY, crosshairColor)
 		}
-
+		
 		xPos : i32 = CandleList_IndexToPixelX(candleData[zoomIndex], cursorCandleIndex, scaleData) - cameraPosX
 		candleWidth : i32 = CandleList_IndexToWidth(candleData[zoomIndex], cursorCandleIndex, scaleData)
 
-		for i : i32 = 0; i < screenHeight; i += 2
+		for i : i32 = 0; i < screenHeight; i += 3
 		{
 			DrawPixel(xPos + i32(f32(candleWidth) / 2 - 0.5), i, crosshairColor)
+		}
+		
+		// Draw current price line
+		lastCandle := slice.last(candleData[zoomIndex].candles[:])
+		priceY := Price_ToPixelY(lastCandle.close, scaleData) - cameraPosY
+		priceColor : Color
+		
+		if lastCandle.close < lastCandle.open
+		{
+			priceColor = RED
+			priceY -= 1
+		}
+		else
+		{
+			priceColor = GREEN
+		}
+
+		for i : i32 = 0; i < screenWidth; i += 3
+		{
+			DrawPixel(i, priceY, priceColor)
 		}
 
 		text : [64]u8 = ---
@@ -1108,40 +1196,48 @@ main :: proc()
 		labelPosY : f32 = ---
 
 		// Highest Candle
-		output = fmt.bprintf(text[:], "%.2f\x00", highestCandle.high)
-		textRect = MeasureTextEx(font, strings.unsafe_string_to_cstring(output), FONT_SIZE, 0)
-		labelPosX = f32(CandleList_IndexToPixelX(candleData[zoomIndex], highestCandleIndex, scaleData) - cameraPosX) - textRect.x / 2 + candleCenterOffset
-		labelPosY = f32(Price_ToPixelY(highestCandle.high, scaleData) - cameraPosY) - textRect.y - VERTICAL_LABEL_PADDING
+		if cursorCandleIndex != highestCandleIndex ||
+		   mouseSnapPrice != highestCandle.high
+	    {
+			output = fmt.bprintf(text[:], "%.2f\x00", highestCandle.high)
+			textRect = MeasureTextEx(font, strings.unsafe_string_to_cstring(output), FONT_SIZE, 0)
+			labelPosX = f32(CandleList_IndexToPixelX(candleData[zoomIndex], highestCandleIndex, scaleData) - cameraPosX) - textRect.x / 2 + candleCenterOffset
+			labelPosY = f32(Price_ToPixelY(highestCandle.high, scaleData) - cameraPosY) - textRect.y - VERTICAL_LABEL_PADDING
 
-		if labelPosX < 2
-		{
-			labelPosX = 2
-		}
-		else if labelPosX > f32(screenWidth) - textRect.x - 2 
-		{
-			labelPosX = f32(screenWidth) - textRect.x - 2
-		}
+			if labelPosX < 2
+			{
+				labelPosX = 2
+			}
+			else if labelPosX > f32(screenWidth) - textRect.x - 2 
+			{
+				labelPosX = f32(screenWidth) - textRect.x - 2
+			}
 
-		candleCenterOffset = f32(CandleList_IndexToWidth(candleData[zoomIndex], highestCandleIndex, scaleData)) / 2 - 0.5
-		DrawTextEx(font, strings.unsafe_string_to_cstring(output), {labelPosX, labelPosY}, FONT_SIZE, 0, WHITE)
+			candleCenterOffset = f32(CandleList_IndexToWidth(candleData[zoomIndex], highestCandleIndex, scaleData)) / 2 - 0.5
+			DrawTextEx(font, strings.unsafe_string_to_cstring(output), {labelPosX, labelPosY}, FONT_SIZE, 0, WHITE)
+	    }
 
 		// Lowest Candle
-		output = fmt.bprintf(text[:], "%.2f\x00", lowestCandle.low)
-		textRect = MeasureTextEx(font, strings.unsafe_string_to_cstring(output), FONT_SIZE, 0)
-		labelPosX = f32(CandleList_IndexToPixelX(candleData[zoomIndex], lowestCandleIndex, scaleData) - cameraPosX) - textRect.x / 2 + candleCenterOffset
-		labelPosY = f32(Price_ToPixelY(lowestCandle.low, scaleData) - cameraPosY) + VERTICAL_LABEL_PADDING
+		if cursorCandleIndex != lowestCandleIndex ||
+		   mouseSnapPrice != lowestCandle.low
+	    {
+			output = fmt.bprintf(text[:], "%.2f\x00", lowestCandle.low)
+			textRect = MeasureTextEx(font, strings.unsafe_string_to_cstring(output), FONT_SIZE, 0)
+			labelPosX = f32(CandleList_IndexToPixelX(candleData[zoomIndex], lowestCandleIndex, scaleData) - cameraPosX) - textRect.x / 2 + candleCenterOffset
+			labelPosY = f32(Price_ToPixelY(lowestCandle.low, scaleData) - cameraPosY) + VERTICAL_LABEL_PADDING
 
-		if labelPosX < 2
-		{
-			labelPosX = 2
-		}
-		else if labelPosX > f32(screenWidth) - textRect.x - 2 
-		{
-			labelPosX = f32(screenWidth) - textRect.x - 2
-		}
+			if labelPosX < 2
+			{
+				labelPosX = 2
+			}
+			else if labelPosX > f32(screenWidth) - textRect.x - 2 
+			{
+				labelPosX = f32(screenWidth) - textRect.x - 2
+			}
 
-		candleCenterOffset = f32(CandleList_IndexToWidth(candleData[zoomIndex], lowestCandleIndex, scaleData)) / 2 - 0.5
-		DrawTextEx(font, strings.unsafe_string_to_cstring(output), {labelPosX, labelPosY}, FONT_SIZE, 0, WHITE)
+			candleCenterOffset = f32(CandleList_IndexToWidth(candleData[zoomIndex], lowestCandleIndex, scaleData)) / 2 - 0.5
+			DrawTextEx(font, strings.unsafe_string_to_cstring(output), {labelPosX, labelPosY}, FONT_SIZE, 0, WHITE)
+		}
 
 		// "Downloading" text
 		if downloading
@@ -1158,6 +1254,28 @@ main :: proc()
 				DrawTextEx(font, strings.unsafe_string_to_cstring(output), {posX, posY}, FONT_SIZE, 0, WHITE)
 			}
 		}
+		
+		// Hovered price label
+		labelBackground := BLACK
+		labelBackground.a = 127
+
+		if isSnapped
+		{
+			output = fmt.bprintf(text[:], "%.2f\x00", mouseSnapPrice)
+			
+			width := MeasureTextEx(font, strings.unsafe_string_to_cstring(output), FONT_SIZE, 0).x + HORIZONTAL_LABEL_PADDING * 2
+
+			posX := f32(CandleList_IndexToPixelX(candleData[zoomIndex], cursorCandleIndex + 1, scaleData) - cameraPosX)
+			posY := f32(Price_ToPixelY(mouseSnapPrice, scaleData) - cameraPosY) - f32(labelHeight) / 2
+			
+			if i32(posX + width * 2 - HORIZONTAL_LABEL_PADDING) > screenWidth
+			{
+				posX -= width + f32(CandleList_IndexToWidth(candleData[zoomIndex], cursorCandleIndex, scaleData))
+			}
+
+			DrawRectangleRounded({posX, posY, width, f32(labelHeight)}, 0.5, 10, labelBackground)
+			DrawTextEx(font, strings.unsafe_string_to_cstring(output), {posX + HORIZONTAL_LABEL_PADDING, posY + VERTICAL_LABEL_PADDING}, FONT_SIZE, 0, WHITE)
+		}
 
 		// FPS
 		output = fmt.bprintf(text[:], "%i\x00", GetFPS())
@@ -1166,21 +1284,6 @@ main :: proc()
 		// Zoom Index
 		output = fmt.bprint(text[:], zoomIndex, "\x00")
 		DrawTextEx(font, strings.unsafe_string_to_cstring(output), {0, FONT_SIZE}, FONT_SIZE, 0, WHITE)
-
-		// Current Candle Price
-		if len(visibleCandles) > 0
-		{
-			output = fmt.bprintf(text[:], "%.2f, %.2f, %.2f, %.2f\x00", candleData[zoomIndex].candles[cursorCandleIndex].open, candleData[zoomIndex].candles[cursorCandleIndex].high, candleData[zoomIndex].candles[cursorCandleIndex].low, candleData[zoomIndex].candles[cursorCandleIndex].close)
-			DrawTextEx(font, strings.unsafe_string_to_cstring(output), {0, FONT_SIZE * 2}, FONT_SIZE, 0, WHITE)
-		}
-
-		// Current Candle Price
-		cursorTimestamp := CandleList_IndexToTimestamp(candleData[zoomIndex], cursorCandleIndex)
-		output = fmt.bprint(text[:], Timestamp_ToDayMonthYear(cursorTimestamp).day, Timestamp_ToDayOfWeek(cursorTimestamp), "\x00")
-		DrawTextEx(font, strings.unsafe_string_to_cstring(output), {0, FONT_SIZE * 3}, FONT_SIZE, 0, WHITE)
-
-		labelBackground := BLACK
-		labelBackground.a = 127
 
 		// Draw Price Labels
 		for label, i in priceLabels
@@ -1192,6 +1295,18 @@ main :: proc()
 			
 			DrawRectangleRounded({labelPosX, labelPosY, f32(label.width), f32(labelHeight)}, 0.5, 10, labelBackground)
 			DrawTextEx(font, strings.unsafe_string_to_cstring(label.text), {labelPosX + HORIZONTAL_LABEL_PADDING, labelPosY + VERTICAL_LABEL_PADDING}, FONT_SIZE, 0, WHITE)
+		}
+		
+		// Draw current price label
+		{
+			output = fmt.bprintf(text[:], "%.2f\x00", lastCandle.close)
+
+			labelWidth := MeasureTextEx(font, strings.unsafe_string_to_cstring(output), FONT_SIZE, 0).x + HORIZONTAL_LABEL_PADDING * 2
+			labelPosX = f32(screenWidth) - labelWidth
+			labelPosY = f32(priceY) - f32(labelHeight) / 2
+
+			DrawRectangleRounded({labelPosX, labelPosY, labelWidth, f32(labelHeight)}, 0.5, 10, priceColor)
+			DrawTextEx(font, strings.unsafe_string_to_cstring(output), {labelPosX + HORIZONTAL_LABEL_PADDING, labelPosY + VERTICAL_LABEL_PADDING}, FONT_SIZE, 0, WHITE)
 		}
 		
 		// Draw Timestamp Labels
@@ -1212,6 +1327,8 @@ main :: proc()
 		
 		// Draw Cursor Timestamp Label
 		{
+			cursorTimestamp := CandleList_IndexToTimestamp(candleData[zoomIndex], cursorCandleIndex)
+
 			cursorLabelBuffer : [32]u8
 
 			cursorDayOfWeek := Timestamp_ToDayOfWeek(cursorTimestamp)
