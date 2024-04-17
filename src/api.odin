@@ -51,9 +51,7 @@ LoadHistoricalData :: proc() -> ([dynamic]Candle, DayMonthYear)
 		// First day of bybit trading data
 		dateToDownload = DayMonthYear{25, 3, 2020}
 		
-		os.write(historicalTradesFile, mem.any_to_bytes(dateToDownload.day))
-		os.write(historicalTradesFile, mem.any_to_bytes(dateToDownload.month))
-		os.write(historicalTradesFile, mem.any_to_bytes(dateToDownload.year))
+		os.write(historicalTradesFile, mem.any_to_bytes(dateToDownload))
 	}
 	else
 	{
@@ -64,17 +62,15 @@ LoadHistoricalData :: proc() -> ([dynamic]Candle, DayMonthYear)
 		integer, err := os.read(historicalTradesFile, dateBytes[:])
 
 		// The file stores the next date to be downloaded, rather than the last date that it contains
-		dateToDownload.day = (^int)(&dateBytes[0])^
-		dateToDownload.month = (^int)(&dateBytes[size_of(dateToDownload.day)])^
-		dateToDownload.year = (^int)(&dateBytes[size_of(dateToDownload.day) + size_of(dateToDownload.month)])^
-		
+		dateToDownload = transmute(DayMonthYear)dateBytes
+
 		tradeBuffer : [size_of(Trade)]u8
 		integer, err = os.read(historicalTradesFile, tradeBuffer[:])
-		firstTrade = (^Trade)(&tradeBuffer[0])^
+		firstTrade = transmute(Trade)tradeBuffer
 		
 		os.seek(historicalTradesFile, -size_of(Trade), os.SEEK_END)
 		integer, err = os.read(historicalTradesFile, tradeBuffer[:])
-		previousDayLastTrade = (^Trade)(&tradeBuffer[0])^
+		previousDayLastTrade = transmute(Trade)tradeBuffer
 	}
 	
 	os.close(historicalTradesFile)
