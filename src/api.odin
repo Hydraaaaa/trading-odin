@@ -394,70 +394,91 @@ LoadTradesBetween :: proc(start : i32, end : i32, buffer : ^[dynamic]Trade)
 	min : i32 = 0
 	max : i32 = i32((fileSize - DATE_SIZE) / size_of(Trade))
 	
-	// Binary search for end
-	midTimestamp : i32
-	endIndex : i32 = ---
-	endTimestamp : i32 = ---
-	
-	for
-	{
-		mid := (max - min) / 2 + min
-		
-		timestampBytes : [size_of(i32)]u8 = ---
-		integer, err := os.read_at(file, timestampBytes[:], i64(mid) * size_of(Trade) + DATE_SIZE)
-	
-		midTimestamp = transmute(i32)timestampBytes
+	start := start
+	end := end
 
-		//fmt.print("(", mid, "|", midTimestamp, ") ", sep = "")
-		
-		if midTimestamp < end
-		{
-			min = mid + 1
-		}
-		else
-		{
-			max = mid
-		}
-		
-		if min == max
-		{
-			endIndex = min
-			endTimestamp = midTimestamp
-			break
-		}
-	}
+	startIndex : i32 = ---
+	endIndex : i32 = ---
+
+	timestampBytes : [size_of(i32)]u8 = ---
+	integer, err := os.read_at(file, timestampBytes[:], fileSize - size_of(Trade))
+	lastTimestamp := transmute(i32)timestampBytes
 	
-	// Binary search for start
-	min = 0
-	max = endIndex - 1
-	
-	for
+	if end > lastTimestamp
 	{
-		mid := (max - min) / 2 + min
-		
-		timestampBytes : [size_of(i32)]u8 = ---
-		integer, err := os.read_at(file, timestampBytes[:], i64(mid) * size_of(Trade) + DATE_SIZE)
-	
-		midTimestamp = transmute(i32)timestampBytes
-		
-		if midTimestamp < start
-		{
-			min = mid + 1
-		}
-		else
-		{
-			max = mid
-		}
-		
-		if min == max
-		{
-			break
-		}
+		end = lastTimestamp
+		endIndex = max
 	}
+	else
+	{
+		// Binary search for end
+		for
+		{
+			mid := (max - min) / 2 + min
+			
+			integer, err := os.read_at(file, timestampBytes[:], i64(mid) * size_of(Trade) + DATE_SIZE)
+		
+			midTimestamp := transmute(i32)timestampBytes
+
+			if midTimestamp < end
+			{
+				min = mid + 1
+			}
+			else
+			{
+				max = mid
+			}
+			
+			if min == max
+			{
+				break
+			}
+		}
+
+		endIndex = min
+	}
+
+	integer, err = os.read_at(file, timestampBytes[:], DATE_SIZE)
+	firstTimestamp := transmute(i32)timestampBytes
 	
-	startIndex := min
+	if start < firstTimestamp
+	{
+		start = firstTimestamp
+		startIndex = 0
+	}
+	else
+	{
+		// Binary search for start
+		min = 0
+		max = endIndex - 1
+		
+		for
+		{
+			mid := (max - min) / 2 + min
+			
+			integer, err := os.read_at(file, timestampBytes[:], i64(mid) * size_of(Trade) + DATE_SIZE)
+		
+			midTimestamp := transmute(i32)timestampBytes
+			
+			if midTimestamp < start
+			{
+				min = mid + 1
+			}
+			else
+			{
+				max = mid
+			}
+			
+			if min == max
+			{
+				break
+			}
+		}
+
+		startIndex = min
+	}
 	
 	non_zero_resize(buffer, int(endIndex - startIndex))
 	
-	integer, err := os.read_at(file, slice.reinterpret([]u8, buffer[:]), i64(startIndex) * size_of(Trade) + DATE_SIZE)
+	integer, err = os.read_at(file, slice.reinterpret([]u8, buffer[:]), i64(startIndex) * size_of(Trade) + DATE_SIZE)
 }
