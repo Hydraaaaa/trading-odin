@@ -1,5 +1,6 @@
 package main
 
+import "core:fmt"
 import "vendor:raylib"
 
 CandleCloseLevel :: struct

@@ -4,16 +4,12 @@ import "core:fmt"
 import "core:strings"
 import "core:slice"
 import "core:strconv"
-import "core:math"
 import "core:os"
 import "core:bytes"
 import "core:compress/gzip"
 import "core:mem"
-import "core:bufio"
-import "odin-http/client"
-import "core:thread"
 
-import "core:time"
+import "odin-http/client"
 
 Trade :: struct
 {

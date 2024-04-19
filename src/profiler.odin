@@ -1,8 +1,8 @@
 package main
 
+import "core:fmt"
 import "core:os"
 import "core:time"
-import "core:fmt"
 import "core:slice"
 import "core:strings"
 import "core:encoding/csv"

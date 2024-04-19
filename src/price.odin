@@ -1,7 +1,7 @@
 package main
 
-import "core:math"
 import "core:fmt"
+import "core:math"
 
 Price_ToPixelY :: proc(price : f32, scaleData : ScaleData) -> i32
 {

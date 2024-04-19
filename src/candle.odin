@@ -1,10 +1,6 @@
 package main
 
 import "core:fmt"
-import "core:strings"
-import "core:os"
-import "core:strconv"
-import "vendor:raylib"
 
 Candle :: struct
 {
