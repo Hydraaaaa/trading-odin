@@ -13,8 +13,8 @@ VolumeProfile :: struct
 
 VolumeProfileBucket :: struct
 {
-    buyVolume : f32,
     sellVolume : f32,
+    buyVolume : f32,
 }
 
 VolumeProfile_Create :: proc{VolumeProfile_CreateFromTrades, VolumeProfile_CreateFromCandles}
@@ -30,15 +30,23 @@ VolumeProfile_CreateFromTrades :: proc(trades : []Trade, high : f32, low : f32, 
     
     resize(&profile.buckets, int((topPrice - profile.bottomPrice) / bucketSize))
     
-    for trade in trades
+    #no_bounds_check \
     {
-        if trade.isBuy
+        lenTrades := len(trades)
+        for i in 0 ..< lenTrades
         {
-            profile.buckets[int((trade.price - profile.bottomPrice) / bucketSize)].buyVolume += trade.volume
-        }
-        else
-        {
-            profile.buckets[int((trade.price - profile.bottomPrice) / bucketSize)].sellVolume += trade.volume
+            // Cast a VolumeProfileBucket to [2]f32, and if isBuy is true, its value will be 1, which allows me to index buyVolume instead of sellVolume
+            // This line of code is a performant alternative to the commented code below
+            (transmute(^[2]f32)&profile.buckets[int((trades[i].price - profile.bottomPrice) / bucketSize)])[int(trades[i].isBuy)] += trades[i].volume
+
+            //if trade.isBuy
+            //{
+            //    profile.buckets[int((trade.price - profile.bottomPrice) / bucketSize)].buyVolume += trade.volume
+            //}
+            //else
+            //{
+            //    profile.buckets[int((trade.price - profile.bottomPrice) / bucketSize)].sellVolume += trade.volume
+            //}
         }
     }
     
