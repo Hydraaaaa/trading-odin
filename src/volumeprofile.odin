@@ -63,6 +63,58 @@ VolumeProfile_CreateFromTrades :: proc(trades : []Trade, high : f32, low : f32, 
 
 VolumeProfile_CreateFromCandles :: proc(candles : []Candle, high : f32, low : f32, bucketSize : f32 = 10) -> VolumeProfile
 {
-    fmt.println("VolumeProfile_CreateFromCandles is not yet implemented")
-    return VolumeProfile{}
+    profile : VolumeProfile
+    
+    profile.bottomPrice = low - math.mod(low, bucketSize)
+    profile.bucketSize = bucketSize
+    
+    topPrice := high - math.mod(high, bucketSize) + bucketSize
+    
+    resize(&profile.buckets, int((topPrice - profile.bottomPrice) / bucketSize))
+    
+    for candle in candles
+    {
+        totalBucketCoverage := (candle.high - candle.low) / bucketSize
+        
+        topBucketCoverage := math.mod(candle.high, bucketSize) / bucketSize
+        bottomBucketCoverage := 1 - (math.mod(candle.low, bucketSize) / bucketSize)
+        
+        perBucketVolume := candle.volume / totalBucketCoverage
+        
+        startBucket := int((candle.low - profile.bottomPrice) / bucketSize)
+        endBucket := startBucket + int(totalBucketCoverage - topBucketCoverage - bottomBucketCoverage) + 2
+        
+        if candle.open > candle.close
+        {
+            profile.buckets[startBucket].sellVolume += perBucketVolume * bottomBucketCoverage
+
+            for i in startBucket + 1 ..< endBucket - 1 
+            {
+                profile.buckets[i].sellVolume += perBucketVolume
+            }
+
+            profile.buckets[endBucket - 1].sellVolume += perBucketVolume * topBucketCoverage
+        }
+        else
+        {
+            profile.buckets[startBucket].buyVolume += perBucketVolume * bottomBucketCoverage
+
+            for i in startBucket + 1 ..< endBucket - 1 
+            {
+                profile.buckets[i].buyVolume += perBucketVolume
+            }
+
+            profile.buckets[endBucket - 1].buyVolume += perBucketVolume * topBucketCoverage
+        }
+    }
+    
+    for bucket in profile.buckets
+    {
+        if bucket.buyVolume + bucket.sellVolume > profile.highestBucketVolume
+        {
+            profile.highestBucketVolume = bucket.buyVolume + bucket.sellVolume
+        }
+    }
+    
+    return profile
 }
