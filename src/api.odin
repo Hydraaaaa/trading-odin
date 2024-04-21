@@ -450,7 +450,7 @@ LoadTradesBetween :: proc(start : i32, end : i32, buffer : ^[dynamic]Trade)
 	{
 		// Binary search for start
 		min = 0
-		max = endIndex - 1
+		max = endIndex
 		
 		for
 		{
