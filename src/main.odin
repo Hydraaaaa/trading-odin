@@ -566,7 +566,6 @@ main :: proc()
 		PriceLabel :: struct
 		{
 			price : f32,
-			text : string,
 			textBuffer : [32]u8, // Much larger buffer than timestamp labels, as log scale can balloon the prices, and memecoins, if ever implemented, use huge decimals
 			width : i32,
 			color : Color,
@@ -616,8 +615,8 @@ main :: proc()
 			label := &priceLabels[len(priceLabels) - 1]
 			
 			label.price = topLabelPrice
-			label.text = fmt.bprintf(label.textBuffer[:], "%.2f\x00", label.price)
-			label.width = i32(MeasureTextEx(font, strings.unsafe_string_to_cstring(label.text), FONT_SIZE, 0).x) + HORIZONTAL_LABEL_PADDING * 2
+			fmt.bprintf(label.textBuffer[:], "%.2f\x00", label.price)
+			label.width = i32(MeasureTextEx(font, cstring(&label.textBuffer[0]), FONT_SIZE, 0).x) + HORIZONTAL_LABEL_PADDING * 2
 			label.color = Color{255, 255, 255, MAX_ALPHA}
 			
 			prevPrice := topLabelPrice
@@ -654,8 +653,8 @@ main :: proc()
 				label := &priceLabels[len(priceLabels) - 1]
 				
 				label.price = currentPrice
-				label.text = fmt.bprintf(label.textBuffer[:], "%.2f\x00", label.price)
-				label.width = i32(MeasureTextEx(font, strings.unsafe_string_to_cstring(label.text), FONT_SIZE, 0).x) + HORIZONTAL_LABEL_PADDING * 2
+				fmt.bprintf(label.textBuffer[:], "%.2f\x00", label.price)
+				label.width = i32(MeasureTextEx(font, cstring(&label.textBuffer[0]), FONT_SIZE, 0).x) + HORIZONTAL_LABEL_PADDING * 2
 				label.color = Color{255, 255, 255, MAX_ALPHA}
 				
 				prevPixel = Price_ToPixelY(currentPrice, scaleData)
@@ -704,8 +703,8 @@ main :: proc()
 				label := &priceLabels[len(priceLabels) - 1]
 				
 				label.price = f32(currentPrice) / 100
-				label.text = fmt.bprintf(label.textBuffer[:], "%.2f\x00", label.price)
-				label.width = i32(MeasureTextEx(font, strings.unsafe_string_to_cstring(label.text), FONT_SIZE, 0).x) + HORIZONTAL_LABEL_PADDING * 2
+				fmt.bprintf(label.textBuffer[:], "%.2f\x00", label.price)
+				label.width = i32(MeasureTextEx(font, cstring(&label.textBuffer[0]), FONT_SIZE, 0).x) + HORIZONTAL_LABEL_PADDING * 2
 				
 				significantIncrementTest := label.price / (f32(priceIncrementMultiplier) / 10)
 				
@@ -740,7 +739,6 @@ main :: proc()
 		TimestampLabel :: struct
 		{
 			timestamp : i32,
-			text : string,
 			textBuffer : [8]u8,
 			color : Color,
 		}
@@ -817,30 +815,30 @@ main :: proc()
 						{
 							switch currentDate.month
 							{
-								case 2: label.text = fmt.bprintf(label.textBuffer[:], "Feb\x00")
-								case 3: label.text = fmt.bprintf(label.textBuffer[:], "Mar\x00")
-								case 4: label.text = fmt.bprintf(label.textBuffer[:], "Apr\x00")
-								case 5: label.text = fmt.bprintf(label.textBuffer[:], "May\x00")
-								case 6: label.text = fmt.bprintf(label.textBuffer[:], "Jun\x00")
-								case 7: label.text = fmt.bprintf(label.textBuffer[:], "Jul\x00")
-								case 8: label.text = fmt.bprintf(label.textBuffer[:], "Aug\x00")
-								case 9: label.text = fmt.bprintf(label.textBuffer[:], "Sep\x00")
-								case 10: label.text = fmt.bprintf(label.textBuffer[:], "Oct\x00")
-								case 11: label.text = fmt.bprintf(label.textBuffer[:], "Nov\x00")
-								case 12: label.text = fmt.bprintf(label.textBuffer[:], "Dec\x00")
-								case: label.text = fmt.bprintf(label.textBuffer[:], "%i\x00", currentDate.year)
+								case 2: fmt.bprintf(label.textBuffer[:], "Feb\x00")
+								case 3: fmt.bprintf(label.textBuffer[:], "Mar\x00")
+								case 4: fmt.bprintf(label.textBuffer[:], "Apr\x00")
+								case 5: fmt.bprintf(label.textBuffer[:], "May\x00")
+								case 6: fmt.bprintf(label.textBuffer[:], "Jun\x00")
+								case 7: fmt.bprintf(label.textBuffer[:], "Jul\x00")
+								case 8: fmt.bprintf(label.textBuffer[:], "Aug\x00")
+								case 9: fmt.bprintf(label.textBuffer[:], "Sep\x00")
+								case 10: fmt.bprintf(label.textBuffer[:], "Oct\x00")
+								case 11: fmt.bprintf(label.textBuffer[:], "Nov\x00")
+								case 12: fmt.bprintf(label.textBuffer[:], "Dec\x00")
+								case: fmt.bprintf(label.textBuffer[:], "%i\x00", currentDate.year)
 							}
 						}
 						else
 						{
-							label.text = fmt.bprintf(label.textBuffer[:], "%i\x00", currentDate.day)
+							fmt.bprintf(label.textBuffer[:], "%i\x00", currentDate.day)
 						}
 					}
 					else
 					{
 						hours   := dayTimestamp / 3600
 						minutes := dayTimestamp % 3600 / 60
-						label.text = fmt.bprintf(label.textBuffer[:], "%i:%2i", hours, minutes)
+						fmt.bprintf(label.textBuffer[:], "%i:%2i", hours, minutes)
 					}
 					
 					// Fading out smaller increments
@@ -945,18 +943,18 @@ main :: proc()
 					
 					switch currentDate.month
 					{
-						case 2: label.text = fmt.bprintf(label.textBuffer[:], "Feb\x00")
-						case 3: label.text = fmt.bprintf(label.textBuffer[:], "Mar\x00")
-						case 4: label.text = fmt.bprintf(label.textBuffer[:], "Apr\x00")
-						case 5: label.text = fmt.bprintf(label.textBuffer[:], "May\x00")
-						case 6: label.text = fmt.bprintf(label.textBuffer[:], "Jun\x00")
-						case 7: label.text = fmt.bprintf(label.textBuffer[:], "Jul\x00")
-						case 8: label.text = fmt.bprintf(label.textBuffer[:], "Aug\x00")
-						case 9: label.text = fmt.bprintf(label.textBuffer[:], "Sep\x00")
-						case 10: label.text = fmt.bprintf(label.textBuffer[:], "Oct\x00")
-						case 11: label.text = fmt.bprintf(label.textBuffer[:], "Nov\x00")
-						case 12: label.text = fmt.bprintf(label.textBuffer[:], "Dec\x00")
-						case: label.text = fmt.bprintf(label.textBuffer[:], "%i\x00", currentDate.year)
+						case 2: fmt.bprintf(label.textBuffer[:], "Feb\x00")
+						case 3: fmt.bprintf(label.textBuffer[:], "Mar\x00")
+						case 4: fmt.bprintf(label.textBuffer[:], "Apr\x00")
+						case 5: fmt.bprintf(label.textBuffer[:], "May\x00")
+						case 6: fmt.bprintf(label.textBuffer[:], "Jun\x00")
+						case 7: fmt.bprintf(label.textBuffer[:], "Jul\x00")
+						case 8: fmt.bprintf(label.textBuffer[:], "Aug\x00")
+						case 9: fmt.bprintf(label.textBuffer[:], "Sep\x00")
+						case 10: fmt.bprintf(label.textBuffer[:], "Oct\x00")
+						case 11: fmt.bprintf(label.textBuffer[:], "Nov\x00")
+						case 12: fmt.bprintf(label.textBuffer[:], "Dec\x00")
+						case: fmt.bprintf(label.textBuffer[:], "%i\x00", currentDate.year)
 					}
 
 					prevTimestamp = currentTimestamp
@@ -1186,8 +1184,7 @@ main :: proc()
 			DrawPixel(i, priceY, priceColor)
 		}
 
-		text : [64]u8 = ---
-		output : string = ---
+		textBuffer : [64]u8 = ---
 
 		textRect : Vector2 = ---
 		candleCenterOffset : f32 = ---
@@ -1198,8 +1195,8 @@ main :: proc()
 		if cursorCandleIndex != highestCandleIndex ||
 		   mouseSnapPrice != highestCandle.high
 	    {
-			output = fmt.bprintf(text[:], "%.2f\x00", highestCandle.high)
-			textRect = MeasureTextEx(font, strings.unsafe_string_to_cstring(output), FONT_SIZE, 0)
+			fmt.bprintf(textBuffer[:], "%.2f\x00", highestCandle.high)
+			textRect = MeasureTextEx(font, cstring(&textBuffer[0]), FONT_SIZE, 0)
 			labelPosX = f32(CandleList_IndexToPixelX(candleData[zoomIndex], highestCandleIndex, scaleData) - cameraPosX) - textRect.x / 2 + candleCenterOffset
 			labelPosY = f32(Price_ToPixelY(highestCandle.high, scaleData) - cameraPosY) - textRect.y - VERTICAL_LABEL_PADDING
 
@@ -1213,15 +1210,15 @@ main :: proc()
 			}
 
 			candleCenterOffset = f32(CandleList_IndexToWidth(candleData[zoomIndex], highestCandleIndex, scaleData)) / 2 - 0.5
-			DrawTextEx(font, strings.unsafe_string_to_cstring(output), {labelPosX, labelPosY}, FONT_SIZE, 0, WHITE)
+			DrawTextEx(font, cstring(&textBuffer[0]), {labelPosX, labelPosY}, FONT_SIZE, 0, WHITE)
 	    }
 
 		// Lowest Candle
 		if cursorCandleIndex != lowestCandleIndex ||
 		   mouseSnapPrice != lowestCandle.low
 	    {
-			output = fmt.bprintf(text[:], "%.2f\x00", lowestCandle.low)
-			textRect = MeasureTextEx(font, strings.unsafe_string_to_cstring(output), FONT_SIZE, 0)
+			fmt.bprintf(textBuffer[:], "%.2f\x00", lowestCandle.low)
+			textRect = MeasureTextEx(font, cstring(&textBuffer[0]), FONT_SIZE, 0)
 			labelPosX = f32(CandleList_IndexToPixelX(candleData[zoomIndex], lowestCandleIndex, scaleData) - cameraPosX) - textRect.x / 2 + candleCenterOffset
 			labelPosY = f32(Price_ToPixelY(lowestCandle.low, scaleData) - cameraPosY) + VERTICAL_LABEL_PADDING
 
@@ -1235,7 +1232,7 @@ main :: proc()
 			}
 
 			candleCenterOffset = f32(CandleList_IndexToWidth(candleData[zoomIndex], lowestCandleIndex, scaleData)) / 2 - 0.5
-			DrawTextEx(font, strings.unsafe_string_to_cstring(output), {labelPosX, labelPosY}, FONT_SIZE, 0, WHITE)
+			DrawTextEx(font, cstring(&textBuffer[0]), {labelPosX, labelPosY}, FONT_SIZE, 0, WHITE)
 		}
 
 		// "Downloading" text
@@ -1249,8 +1246,8 @@ main :: proc()
 			{
 				posX := f32(Timestamp_ToPixelX(DayMonthYear_ToTimestamp(dateToDownload), scaleData) - cameraPosX) + 2
 				posY := f32(Price_ToPixelY(candleData[zoomIndex].candles[lastCandleIndex].close, scaleData) - cameraPosY) - MeasureTextEx(font, "W\x00", FONT_SIZE, 0).y / 2
-				output = fmt.bprint(text[:], "Downloading\x00")
-				DrawTextEx(font, strings.unsafe_string_to_cstring(output), {posX, posY}, FONT_SIZE, 0, WHITE)
+				fmt.bprint(textBuffer[:], "Downloading\x00")
+				DrawTextEx(font, cstring(&textBuffer[0]), {posX, posY}, FONT_SIZE, 0, WHITE)
 			}
 		}
 		
@@ -1260,9 +1257,9 @@ main :: proc()
 
 		if isSnapped
 		{
-			output = fmt.bprintf(text[:], "%.2f\x00", mouseSnapPrice)
+			fmt.bprintf(textBuffer[:], "%.2f\x00", mouseSnapPrice)
 			
-			width := MeasureTextEx(font, strings.unsafe_string_to_cstring(output), FONT_SIZE, 0).x + HORIZONTAL_LABEL_PADDING * 2
+			width := MeasureTextEx(font, cstring(&textBuffer[0]), FONT_SIZE, 0).x + HORIZONTAL_LABEL_PADDING * 2
 
 			posX := f32(CandleList_IndexToPixelX(candleData[zoomIndex], cursorCandleIndex + 1, scaleData) - cameraPosX)
 			posY := f32(Price_ToPixelY(mouseSnapPrice, scaleData) - cameraPosY) - f32(labelHeight) / 2
@@ -1273,55 +1270,55 @@ main :: proc()
 			}
 
 			DrawRectangleRounded({posX, posY, width, f32(labelHeight)}, 0.5, 10, labelBackground)
-			DrawTextEx(font, strings.unsafe_string_to_cstring(output), {posX + HORIZONTAL_LABEL_PADDING, posY + VERTICAL_LABEL_PADDING}, FONT_SIZE, 0, WHITE)
+			DrawTextEx(font, cstring(&textBuffer[0]), {posX + HORIZONTAL_LABEL_PADDING, posY + VERTICAL_LABEL_PADDING}, FONT_SIZE, 0, WHITE)
 		}
 
 		// FPS
-		output = fmt.bprintf(text[:], "%i\x00", GetFPS())
-		DrawTextEx(font, strings.unsafe_string_to_cstring(output), {0, 0}, FONT_SIZE, 0, WHITE)
+		fmt.bprintf(textBuffer[:], "%i\x00", GetFPS())
+		DrawTextEx(font, cstring(&textBuffer[0]), {0, 0}, FONT_SIZE, 0, WHITE)
 
 		// Zoom Index
-		output = fmt.bprint(text[:], zoomIndex, "\x00")
-		DrawTextEx(font, strings.unsafe_string_to_cstring(output), {0, FONT_SIZE}, FONT_SIZE, 0, WHITE)
+		fmt.bprint(textBuffer[:], zoomIndex, "\x00")
+		DrawTextEx(font, cstring(&textBuffer[0]), {0, FONT_SIZE}, FONT_SIZE, 0, WHITE)
 
 		// Draw Price Labels
-		for label, i in priceLabels
+		for i in 0 ..< len(priceLabels)
 		{
-			pixelY := Price_ToPixelY(label.price, scaleData) - cameraPosY
+			pixelY := Price_ToPixelY(priceLabels[i].price, scaleData) - cameraPosY
 			
-			labelPosX = f32(screenWidth) - f32(label.width)
+			labelPosX = f32(screenWidth) - f32(priceLabels[i].width)
 			labelPosY = f32(pixelY) - f32(labelHeight) / 2
 			
-			DrawRectangleRounded({labelPosX, labelPosY, f32(label.width), f32(labelHeight)}, 0.5, 10, labelBackground)
-			DrawTextEx(font, strings.unsafe_string_to_cstring(label.text), {labelPosX + HORIZONTAL_LABEL_PADDING, labelPosY + VERTICAL_LABEL_PADDING}, FONT_SIZE, 0, WHITE)
+			DrawRectangleRounded({labelPosX, labelPosY, f32(priceLabels[i].width), f32(labelHeight)}, 0.5, 10, labelBackground)
+			DrawTextEx(font, cstring(&priceLabels[i].textBuffer[0]), {labelPosX + HORIZONTAL_LABEL_PADDING, labelPosY + VERTICAL_LABEL_PADDING}, FONT_SIZE, 0, WHITE)
 		}
 		
 		// Draw current price label
 		{
-			output = fmt.bprintf(text[:], "%.2f\x00", lastCandle.close)
+			fmt.bprintf(textBuffer[:], "%.2f\x00", lastCandle.close)
 
-			labelWidth := MeasureTextEx(font, strings.unsafe_string_to_cstring(output), FONT_SIZE, 0).x + HORIZONTAL_LABEL_PADDING * 2
+			labelWidth := MeasureTextEx(font, cstring(&textBuffer[0]), FONT_SIZE, 0).x + HORIZONTAL_LABEL_PADDING * 2
 			labelPosX = f32(screenWidth) - labelWidth
 			labelPosY = f32(priceY) - f32(labelHeight) / 2
 
 			DrawRectangleRounded({labelPosX, labelPosY, labelWidth, f32(labelHeight)}, 0.5, 10, priceColor)
-			DrawTextEx(font, strings.unsafe_string_to_cstring(output), {labelPosX + HORIZONTAL_LABEL_PADDING, labelPosY + VERTICAL_LABEL_PADDING}, FONT_SIZE, 0, WHITE)
+			DrawTextEx(font, cstring(&textBuffer[0]), {labelPosX + HORIZONTAL_LABEL_PADDING, labelPosY + VERTICAL_LABEL_PADDING}, FONT_SIZE, 0, WHITE)
 		}
 		
 		// Draw Timestamp Labels
-		for label, i in timestampLabels
+		for i in 0 ..< len(timestampLabels)
 		{
-			pixelX := Timestamp_ToPixelX(label.timestamp, scaleData) - cameraPosX
+			pixelX := Timestamp_ToPixelX(timestampLabels[i].timestamp, scaleData) - cameraPosX
 			
-			labelWidth := MeasureTextEx(font, strings.unsafe_string_to_cstring(label.text), FONT_SIZE, 0).x + HORIZONTAL_LABEL_PADDING * 2
+			labelWidth := MeasureTextEx(font, cstring(&timestampLabels[i].textBuffer[0]), FONT_SIZE, 0).x + HORIZONTAL_LABEL_PADDING * 2
 			labelPosX = f32(pixelX) - labelWidth / 2
 			labelPosY = f32(screenHeight) - f32(labelHeight)
 			
-			labelColor := label.color
+			labelColor := timestampLabels[i].color
 			labelColor.a = 255
 			
 			DrawRectangleRounded({labelPosX, labelPosY, labelWidth, f32(labelHeight)}, 0.5, 10, labelBackground)
-			DrawTextEx(font, strings.unsafe_string_to_cstring(label.text), {labelPosX + HORIZONTAL_LABEL_PADDING, labelPosY + VERTICAL_LABEL_PADDING}, FONT_SIZE, 0, labelColor)
+			DrawTextEx(font, cstring(&timestampLabels[i].textBuffer[0]), {labelPosX + HORIZONTAL_LABEL_PADDING, labelPosY + VERTICAL_LABEL_PADDING}, FONT_SIZE, 0, labelColor)
 		}
 		
 		// Draw Cursor Timestamp Label
@@ -1401,14 +1398,12 @@ main :: proc()
 
 			pixelX := Timestamp_ToPixelX(cursorTimestamp, scaleData) - cameraPosX
 
-			cursorLabelString := strings.string_from_ptr(&cursorLabelBuffer[0], bufferIndex)
-
-			labelWidth := MeasureTextEx(font, strings.unsafe_string_to_cstring(cursorLabelString), FONT_SIZE, 0).x + HORIZONTAL_LABEL_PADDING * 2
+			labelWidth := MeasureTextEx(font, cstring(&cursorLabelBuffer[0]), FONT_SIZE, 0).x + HORIZONTAL_LABEL_PADDING * 2
 			labelPosX = f32(pixelX) - labelWidth / 2
 			labelPosY = f32(screenHeight) - f32(labelHeight)
 
 			DrawRectangleRounded({labelPosX, labelPosY, labelWidth, f32(labelHeight)}, 0.5, 10, Color{54, 58, 69, 255})
-			DrawTextEx(font, strings.unsafe_string_to_cstring(cursorLabelString), {labelPosX + HORIZONTAL_LABEL_PADDING, labelPosY + VERTICAL_LABEL_PADDING}, FONT_SIZE, 0, WHITE)
+			DrawTextEx(font, cstring(&cursorLabelBuffer[0]), {labelPosX + HORIZONTAL_LABEL_PADDING, labelPosY + VERTICAL_LABEL_PADDING}, FONT_SIZE, 0, WHITE)
 		}
 		
 		clear(&timestampLabels)
