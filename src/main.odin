@@ -47,7 +47,6 @@ main :: proc()
 	windowedScreenHeight : i32 = 0
 
     SetTargetFPS(60)
-	fpsString : string
 
 	font := LoadFontEx("roboto-bold.ttf", FONT_SIZE, nil, 0)
 	
