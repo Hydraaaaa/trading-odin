@@ -292,26 +292,17 @@ DownloadDay :: proc(date : ^DayMonthYear, candles : ^[1440]Candle, candlesLen : 
 	
 	for trade in orderedTrades
 	{
-		newCandle := false
-
 		// This is a for instead of an if to handle cases where the next trade is more than a minute after the last trade
 		// Keep adding empty minutes until we're up to the minute of the trade
 		for trade.timestamp >= currentCandleTimestamp + 60
 		{
-			closePrice := candle.close
 			currentCandleTimestamp += 60
 			candles[candlesAdded] = candle
 			candlesAdded += 1
-			candle.open = closePrice
-			candle.high = closePrice
-			candle.low = closePrice
+			candle.open = candle.close
+			candle.high = candle.close
+			candle.low = candle.close
 			candle.volume = 0
-			newCandle = true
-		}
-
-		if newCandle
-		{
-			continue
 		}
 
 		if trade.price > candle.high
