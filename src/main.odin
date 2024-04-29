@@ -52,9 +52,9 @@ main :: proc()
 	
 	candleData : [TIMEFRAME_COUNT]CandleList
 
-	dateToDownload : DayMonthYear = ---
+	dateToDownload := LoadDateToDownload()
 
-	candleData[Timeframe.MINUTE].candles, dateToDownload = LoadHistoricalData()
+	candleData[Timeframe.MINUTE].candles = LoadMinuteCandles()
 	candleData[Timeframe.MINUTE].offset = BYBIT_ORIGIN_MINUTE_TIMESTAMP
 	defer delete(candleData[Timeframe.MINUTE].candles)
 	
