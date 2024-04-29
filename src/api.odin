@@ -28,12 +28,8 @@ BYBIT_ORIGIN_MINUTE_TIMESTAMP :: 1_585_132_560 - TIMESTAMP_2010
 // DayMonthYear is the next date to download
 LoadHistoricalData :: proc() -> ([dynamic]Candle, DayMonthYear)
 {
-	candles := make([dynamic]Candle, 0, 1440)
-
 	firstTrade : Trade
 	previousDayLastTrade : Trade
-
-	dateToDownload : DayMonthYear
 
 	// Load Local Trades File ><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
 
@@ -45,9 +41,7 @@ LoadHistoricalData :: proc() -> ([dynamic]Candle, DayMonthYear)
 		historicalTradesFile, ok = os.open(TRADES_FILE, os.O_CREATE)
 
 		// First day of bybit trading data
-		dateToDownload = DayMonthYear{25, 3, 2020}
-		
-		os.write(historicalTradesFile, mem.any_to_bytes(dateToDownload))
+		os.write(historicalTradesFile, mem.any_to_bytes(DayMonthYear{25, 3, 2020}))
 	}
 	else
 	{
@@ -56,9 +50,6 @@ LoadHistoricalData :: proc() -> ([dynamic]Candle, DayMonthYear)
 		dateBytes : [size_of(DayMonthYear)]byte
 
 		integer, err := os.read(historicalTradesFile, dateBytes[:])
-
-		// The file stores the next date to be downloaded, rather than the last date that it contains
-		dateToDownload = transmute(DayMonthYear)dateBytes
 
 		tradeBuffer : [size_of(Trade)]u8
 		integer, err = os.read(historicalTradesFile, tradeBuffer[:])
@@ -72,6 +63,8 @@ LoadHistoricalData :: proc() -> ([dynamic]Candle, DayMonthYear)
 	os.close(historicalTradesFile)
 	
 	// Load Historical Candles File ><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
+
+	candles := make([dynamic]Candle, 0, 1440)
 
 	historicalCandlesFile : os.Handle
 
