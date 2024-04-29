@@ -25,53 +25,40 @@ MINUTE_CANDLES_FILE :: "historicalminutecandles.bin"
 BYBIT_ORIGIN_DATE :: DayMonthYear{25, 3, 2020}
 BYBIT_ORIGIN_MINUTE_TIMESTAMP :: 1_585_132_560 - TIMESTAMP_2010
 
-// DayMonthYear is the next date to download
-LoadHistoricalData :: proc() -> ([dynamic]Candle, DayMonthYear)
+LoadDateToDownload :: proc() -> DayMonthYear
 {
-	firstTrade : Trade
-	previousDayLastTrade : Trade
-
-	// Load Local Trades File ><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
-
-	historicalTradesFile : os.Handle
+	tradesFile : os.Handle
 	ok : os.Errno
 	
 	if !os.is_file(TRADES_FILE)
 	{
-		historicalTradesFile, ok = os.open(TRADES_FILE, os.O_CREATE)
+		tradesFile, ok = os.open(TRADES_FILE, os.O_CREATE)
+		defer os.close(tradesFile)
 
-		// First day of bybit trading data
-		os.write(historicalTradesFile, mem.any_to_bytes(DayMonthYear{25, 3, 2020}))
+		os.write(tradesFile, mem.any_to_bytes(BYBIT_ORIGIN_DATE))
+
+		return BYBIT_ORIGIN_DATE
 	}
 	else
 	{
-		historicalTradesFile, ok = os.open(TRADES_FILE, os.O_RDWR)
+		tradesFile, ok = os.open(TRADES_FILE, os.O_RDWR)
+		defer os.close(tradesFile)
 
 		dateBytes : [size_of(DayMonthYear)]byte
+		integer, err := os.read(tradesFile, dateBytes[:])
 
-		integer, err := os.read(historicalTradesFile, dateBytes[:])
-
-		tradeBuffer : [size_of(Trade)]u8
-		integer, err = os.read(historicalTradesFile, tradeBuffer[:])
-		firstTrade = transmute(Trade)tradeBuffer
-		
-		os.seek(historicalTradesFile, -size_of(Trade), os.SEEK_END)
-		integer, err = os.read(historicalTradesFile, tradeBuffer[:])
-		previousDayLastTrade = transmute(Trade)tradeBuffer
+		return transmute(DayMonthYear)dateBytes
 	}
-	
-	os.close(historicalTradesFile)
-	
-	// Load Historical Candles File ><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
+}
 
-	candles := make([dynamic]Candle, 0, 1440)
-
-	historicalCandlesFile : os.Handle
-
+LoadMinuteCandles :: proc() -> [dynamic]Candle
+{
 	if !os.is_file(MINUTE_CANDLES_FILE)
 	{
-		historicalCandlesFile, ok = os.open(MINUTE_CANDLES_FILE, os.O_CREATE)
-		os.close(historicalCandlesFile)
+		candlesFile, ok := os.open(MINUTE_CANDLES_FILE, os.O_CREATE)
+		os.close(candlesFile)
+		
+		return make([dynamic]Candle, 0, 1440)
 	}
 	else
 	{
@@ -80,20 +67,20 @@ LoadHistoricalData :: proc() -> ([dynamic]Candle, DayMonthYear)
 		if !success
 		{
 			fmt.println("Reading existing candles file unsuccessful")
-			return nil, DayMonthYear{0,0,0}
+			return nil
 		}
 
 		localCandles := slice.reinterpret([]Candle, bytes)
 
-		reserve(&candles, len(localCandles))
+		candles := make([dynamic]Candle, 0, len(localCandles) + 1440)
 		
 		for candle in localCandles
 		{
 			append(&candles, candle)
 		}
+		
+		return candles
 	}
-	
-	return candles, dateToDownload
 }
 
 // Returns the next date to be downloaded in future
