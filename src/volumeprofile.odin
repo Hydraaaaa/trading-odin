@@ -3,12 +3,26 @@ package main
 import "core:fmt"
 import "core:math"
 
+VolumeProfilePool :: struct
+{
+    bucketSize : i32,
+    headers : [dynamic]VolumeProfileHeader,
+    buckets : [dynamic]VolumeProfileBucket,
+}
+
+VolumeProfileHeader :: struct
+{
+    bucketPoolIndex : i32,
+    bucketCount : i32,
+    relativeIndexOffset : i32, // When merging profiles, their bucket indices will align based on their offsets
+}
+
 VolumeProfile :: struct
 {
-    bottomPrice : f32,
     bucketSize : f32,
-    buckets : [dynamic]VolumeProfileBucket,
-    highestBucketVolume : f32
+    highestBucketVolume : f32,
+    bottomPrice : f32,
+    buckets : []VolumeProfileBucket,
 }
 
 VolumeProfileBucket :: struct
@@ -17,9 +31,133 @@ VolumeProfileBucket :: struct
     buyVolume : f32,
 }
 
-VolumeProfile_Create :: proc{VolumeProfile_CreateFromTrades, VolumeProfile_CreateFromCandles}
+// Around 1000x faster if bucketSize is a multiple of provided pool's bucketSize
+VolumeProfile_Create :: proc(startTimestamp : i32, endTimestamp : i32, high : f32, low : f32, candles : CandleList, pool : VolumeProfilePool, bucketSize : f32 = 5) -> VolumeProfile
+{
+    if bucketSize <= 0
+    {
+        fmt.println("ERROR: VolumeProfile_Create called with invalid bucketSize")
+        return VolumeProfile{}
+    }
 
-VolumeProfile_CreateFromTrades :: proc(trades : []Trade, high : f32, low : f32, bucketSize : f32 = 50) -> VolumeProfile
+    // If bucketSize doesn't align with pool, revert to slower method
+    if math.mod(bucketSize, f32(pool.bucketSize)) != 0
+    {
+        fmt.println("WARNING: VolumeProfile_Create bucketSize mismatch, will be very slow")
+
+        trades : [dynamic]Trade
+        reserve(&trades, 262_144)
+	
+        LoadTradesBetween(startTimestamp, endTimestamp, &trades)
+
+        return VolumeProfile_CreateFromTrades(trades[:], high, low, bucketSize)
+    }
+
+    profile : VolumeProfile
+    
+    profile.bottomPrice = low - math.mod(low, bucketSize)
+    profile.bucketSize = bucketSize
+    
+    topPrice := high - math.mod(high, bucketSize) + bucketSize
+    
+    profile.buckets = make([]VolumeProfileBucket, int((topPrice - profile.bottomPrice) / bucketSize))
+    
+    startIndex := CandleList_TimestampToIndex(candles, startTimestamp)
+    startIndexTimestamp := CandleList_IndexToTimestamp(candles, startIndex)
+    
+    endIndex := CandleList_TimestampToIndex(candles, endTimestamp)
+    endIndexTimestamp := CandleList_IndexToTimestamp(candles, endIndex)
+    
+    tradesStartTimestamp := startIndexTimestamp
+    tradesEndTimestamp := startTimestamp
+    
+    // If the entire timespan happens within a single hour candle, adjust bounds accordingly
+    if startIndex == endIndex
+    {
+        tradesEndTimestamp = endTimestamp
+    }
+    
+    // Load any trades before the beginning of the first hour profile
+    if tradesStartTimestamp < tradesEndTimestamp
+    {
+        startTrades : [dynamic]Trade
+        LoadTradesBetween(tradesStartTimestamp, tradesEndTimestamp, &startTrades)
+
+        lenTrades := len(startTrades)
+        for i in 0 ..< lenTrades
+        {
+            // Cast a VolumeProfileBucket to [2]f32, and if isBuy is true, its value will be 1, which allows me to index buyVolume instead of sellVolume
+            // This line of code is a performant alternative to the commented code below
+            (transmute(^[2]f32)&profile.buckets[int((startTrades[i].price - profile.bottomPrice) / bucketSize)])[int(startTrades[i].isBuy)] += startTrades[i].volume
+
+            //if startTrades[i].isBuy
+            //{
+            //    profile.buckets[int((startTrades[i].price - profile.bottomPrice) / bucketSize)].buyVolume += startTrades[i].volume
+            //}
+            //else
+            //{
+            //    profile.buckets[int((startTrades[i].price - profile.bottomPrice) / bucketSize)].sellVolume += startTrades[i].volume
+            //}
+        }
+        
+        startIndex += 1
+    }
+    
+    // If timespan extends beyond a single hour candle
+    if startIndex <= endIndex
+    {
+        tradesStartTimestamp = endIndexTimestamp
+        tradesEndTimestamp = endTimestamp
+    
+        // Load any trades after the last whole hour profile
+        if tradesStartTimestamp < tradesEndTimestamp
+        {
+            endTrades : [dynamic]Trade
+            LoadTradesBetween(tradesStartTimestamp, tradesEndTimestamp, &endTrades)
+
+            lenTrades := len(endTrades)
+            for i in 0 ..< lenTrades
+            {
+                // Cast a VolumeProfileBucket to [2]f32, and if isBuy is true, its value will be 1, which allows me to index buyVolume instead of sellVolume
+                // This line of code is a performant alternative to the commented code below
+                (transmute(^[2]f32)&profile.buckets[int((endTrades[i].price - profile.bottomPrice) / bucketSize)])[int(endTrades[i].isBuy)] += endTrades[i].volume
+
+                //if endTrades[i].isBuy
+                //{
+                //    profile.buckets[int((endTrades[i].price - profile.bottomPrice) / bucketSize)].buyVolume += endTrades[i].volume
+                //}
+                //else
+                //{
+                //    profile.buckets[int((endTrades[i].price - profile.bottomPrice) / bucketSize)].sellVolume += endTrades[i].volume
+                //}
+            }
+        }
+    }
+    
+    // Load hourly profiles
+    profileIndexOffset := i32(low / bucketSize)
+
+    for profileHeader in pool.headers[startIndex:endIndex]
+    {
+        for bucket, i in pool.buckets[profileHeader.bucketPoolIndex:profileHeader.bucketPoolIndex + profileHeader.bucketCount]
+        {
+            profile.buckets[(profileHeader.relativeIndexOffset * pool.bucketSize / i32(bucketSize)) - profileIndexOffset + i32(i)].buyVolume += bucket.buyVolume
+            profile.buckets[(profileHeader.relativeIndexOffset * pool.bucketSize / i32(bucketSize)) - profileIndexOffset + i32(i)].sellVolume += bucket.sellVolume
+        }
+    }
+
+    for bucket in profile.buckets
+    {
+        if bucket.buyVolume + bucket.sellVolume > profile.highestBucketVolume
+        {
+            profile.highestBucketVolume = bucket.buyVolume + bucket.sellVolume
+        }
+    }
+    
+    return profile
+}
+
+VolumeProfile_CreateFromTrades :: proc(trades : []Trade, high : f32, low : f32, bucketSize : f32 = 5) -> VolumeProfile
 {
     profile : VolumeProfile
     
@@ -28,26 +166,23 @@ VolumeProfile_CreateFromTrades :: proc(trades : []Trade, high : f32, low : f32, 
     
     topPrice := high - math.mod(high, bucketSize) + bucketSize
     
-    resize(&profile.buckets, int((topPrice - profile.bottomPrice) / bucketSize))
+    profile.buckets = make([]VolumeProfileBucket, int((topPrice - profile.bottomPrice) / bucketSize))
     
-    #no_bounds_check \
+    lenTrades := len(trades)
+    for i in 0 ..< lenTrades
     {
-        lenTrades := len(trades)
-        for i in 0 ..< lenTrades
-        {
-            // Cast a VolumeProfileBucket to [2]f32, and if isBuy is true, its value will be 1, which allows me to index buyVolume instead of sellVolume
-            // This line of code is a performant alternative to the commented code below
-            (transmute(^[2]f32)&profile.buckets[int((trades[i].price - profile.bottomPrice) / bucketSize)])[int(trades[i].isBuy)] += trades[i].volume
+        // Cast a VolumeProfileBucket to [2]f32, and if isBuy is true, its value will be 1, which allows me to index buyVolume instead of sellVolume
+        // This line of code is a performant alternative to the commented code below
+        (transmute(^[2]f32)&profile.buckets[int((trades[i].price - profile.bottomPrice) / bucketSize)])[int(trades[i].isBuy)] += trades[i].volume
 
-            //if trade.isBuy
-            //{
-            //    profile.buckets[int((trade.price - profile.bottomPrice) / bucketSize)].buyVolume += trade.volume
-            //}
-            //else
-            //{
-            //    profile.buckets[int((trade.price - profile.bottomPrice) / bucketSize)].sellVolume += trade.volume
-            //}
-        }
+        //if trades[i].isBuy
+        //{
+        //    profile.buckets[int((trades[i].price - profile.bottomPrice) / bucketSize)].buyVolume += trades[i].volume
+        //}
+        //else
+        //{
+        //    profile.buckets[int((trades[i].price - profile.bottomPrice) / bucketSize)].sellVolume += trades[i].volume
+        //}
     }
     
     for bucket in profile.buckets
@@ -61,7 +196,7 @@ VolumeProfile_CreateFromTrades :: proc(trades : []Trade, high : f32, low : f32, 
     return profile
 }
 
-VolumeProfile_CreateFromCandles :: proc(candles : []Candle, high : f32, low : f32, bucketSize : f32 = 10) -> VolumeProfile
+VolumeProfile_CreateFromCandles :: proc(candles : []Candle, high : f32, low : f32, bucketSize : f32 = 5) -> VolumeProfile
 {
     profile : VolumeProfile
     
@@ -70,7 +205,7 @@ VolumeProfile_CreateFromCandles :: proc(candles : []Candle, high : f32, low : f3
     
     topPrice := high - math.mod(high, bucketSize) + bucketSize
     
-    resize(&profile.buckets, int((topPrice - profile.bottomPrice) / bucketSize))
+    profile.buckets = make([]VolumeProfileBucket, int((topPrice - profile.bottomPrice) / bucketSize))
     
     for candle in candles
     {
@@ -117,4 +252,9 @@ VolumeProfile_CreateFromCandles :: proc(candles : []Candle, high : f32, low : f3
     }
     
     return profile
+}
+
+VolumeProfile_Destroy :: proc(profile : VolumeProfile)
+{
+    delete(profile.buckets)
 }

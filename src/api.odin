@@ -1,91 +1,23 @@
 package main
 
 import "core:fmt"
-import "core:strings"
-import "core:slice"
-import "core:strconv"
-import "core:os"
 import "core:bytes"
+import "core:slice"
+import "core:strings"
+import "core:strconv"
 import "core:compress/gzip"
-import "core:mem"
 
 import "odin-http/client"
 
-Trade :: struct
-{
-	timestamp : i32,
-	price : f32,
-	volume : f32,
-	isBuy : bool,
-}
-
-TRADES_FILE :: "historicaltrades.bin"
-MINUTE_CANDLES_FILE :: "historicalminutecandles.bin"
-
 BYBIT_ORIGIN_DATE :: DayMonthYear{25, 3, 2020}
 BYBIT_ORIGIN_MINUTE_TIMESTAMP :: 1_585_132_560 - TIMESTAMP_2010
+BYBIT_ORIGIN_HOUR_OF_DAY :: 10
 
-LoadDateToDownload :: proc() -> DayMonthYear
+// Allocates to trades slice, will be nil if download fails  
+DownloadDay :: proc(date : ^DayMonthYear, trades : ^[]Trade)
 {
-	tradesFile : os.Handle
-	ok : os.Errno
-	
-	if !os.is_file(TRADES_FILE)
-	{
-		tradesFile, ok = os.open(TRADES_FILE, os.O_CREATE)
-		defer os.close(tradesFile)
+	trades^ = nil
 
-		os.write(tradesFile, mem.any_to_bytes(BYBIT_ORIGIN_DATE))
-
-		return BYBIT_ORIGIN_DATE
-	}
-	else
-	{
-		tradesFile, ok = os.open(TRADES_FILE, os.O_RDWR)
-		defer os.close(tradesFile)
-
-		dateBytes : [size_of(DayMonthYear)]byte
-		integer, err := os.read(tradesFile, dateBytes[:])
-
-		return transmute(DayMonthYear)dateBytes
-	}
-}
-
-LoadMinuteCandles :: proc() -> [dynamic]Candle
-{
-	if !os.is_file(MINUTE_CANDLES_FILE)
-	{
-		candlesFile, ok := os.open(MINUTE_CANDLES_FILE, os.O_CREATE)
-		os.close(candlesFile)
-		
-		return make([dynamic]Candle, 0, 1440)
-	}
-	else
-	{
-		bytes, success := os.read_entire_file_from_filename(MINUTE_CANDLES_FILE)
-		
-		if !success
-		{
-			fmt.println("Reading existing candles file unsuccessful")
-			return nil
-		}
-
-		localCandles := slice.reinterpret([]Candle, bytes)
-
-		candles := make([dynamic]Candle, 0, len(localCandles) + 1440)
-		
-		for candle in localCandles
-		{
-			append(&candles, candle)
-		}
-		
-		return candles
-	}
-}
-
-// Returns the next date to be downloaded in future
-DownloadDay :: proc(date : ^DayMonthYear, candles : ^[1440]Candle, candlesLen : ^int)
-{
 	pathBuffer : [len("https://public.bybit.com/trading/BTCUSDT/BTCUSDTYYYY-MM-DD.csv.gz")]u8
 	
 	apiResponse, apiError := client.get(fmt.bprintf(pathBuffer[:], "https://public.bybit.com/trading/BTCUSDT/BTCUSDT%i-%2i-%2i.csv.gz", date.year, date.month, date.day))
@@ -93,7 +25,7 @@ DownloadDay :: proc(date : ^DayMonthYear, candles : ^[1440]Candle, candlesLen : 
 	fmt.printfln("Downloading %2i/%2i/%i", date.day, date.month, date.year)
 	if apiError != nil
 	{
-		fmt.println("Request failed: ", apiError)
+		fmt.println("DownloadDay request failed:", apiError)
 		return
 	}
 
@@ -103,7 +35,7 @@ DownloadDay :: proc(date : ^DayMonthYear, candles : ^[1440]Candle, candlesLen : 
 	
 	if responseBodyError != nil
 	{
-		fmt.println("Error retrieving response body: ", responseBodyError)
+		fmt.println("DownloadDay error retrieving response body:", responseBodyError)
 		return
 	}
 	
@@ -111,7 +43,6 @@ DownloadDay :: proc(date : ^DayMonthYear, candles : ^[1440]Candle, candlesLen : 
 	if responseBody.(client.Body_Plain)[0] == '<'
 	{
 		fmt.println("DownloadDay: 404 Not Found")
-		candlesLen^ = -1
 		return
 	}
 
@@ -178,278 +109,21 @@ DownloadDay :: proc(date : ^DayMonthYear, candles : ^[1440]Candle, candlesLen : 
 	// In the first day (25, 3, 2020), trades are in inverse chronological order
 	// More recent days are in chronological order
 
-	// TODO: Compare writing line by line with #reverse, and appending to new array and bulk copying
-	
-	orderedTrades : [dynamic]Trade
-	reserve(&orderedTrades, len(downloadedTrades))
+	trades^ = make([]Trade, len(downloadedTrades))
 
 	// If trades were listed in reverse order in the response body
-	if downloadedTrades[0].timestamp > downloadedTrades[len(downloadedTrades) - 1].timestamp
+	if downloadedTrades[0].timestamp > slice.last(downloadedTrades[:]).timestamp
 	{
-		#reverse for trade in downloadedTrades
+		for i in 0 ..< len(downloadedTrades)
 		{
-			append(&orderedTrades, trade)
+			trades^[i] = downloadedTrades[len(downloadedTrades) - 1 - i]
 		}
 	}
 	else
 	{
-		for trade in downloadedTrades
+		for i in 0 ..< len(downloadedTrades)
 		{
-			append(&orderedTrades, trade)
+			trades^[i] = downloadedTrades[i]
 		}
 	}
-
-	// Append to local trades file <><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
-
-	firstTrade : Trade
-	previousDayLastTrade : Trade
-
-	historicalTradesFile, ok := os.open(TRADES_FILE, os.O_RDWR)
-
-	dateBytes : [size_of(DayMonthYear)]byte
-
-	integer, err := os.read(historicalTradesFile, dateBytes[:])
-
-	tradeBuffer : [size_of(Trade)]u8
-	integer, err = os.read(historicalTradesFile, tradeBuffer[:])
-	firstTrade = (^Trade)(&tradeBuffer[0])^
-	
-	os.seek(historicalTradesFile, -size_of(Trade), os.SEEK_END)
-	integer, err = os.read(historicalTradesFile, tradeBuffer[:])
-	previousDayLastTrade = (^Trade)(&tradeBuffer[0])^
-	
-	if date^ == BYBIT_ORIGIN_DATE
-	{
-		firstTrade = orderedTrades[0]
-	}
-
-	fmt.println("Appending", len(orderedTrades), "trades to local file")
-	
-	_, writeLocalFileError := os.write(historicalTradesFile, slice.to_bytes(orderedTrades[:]))
-	
-	if writeLocalFileError != 0
-	{
-		fmt.println(writeLocalFileError)
-	}
-
-	os.seek(historicalTradesFile, 0, os.SEEK_SET)
-		
-	// File stores the next date to be downloaded in future
-	nextDate := DayMonthYear_AddDays(date^, 1)
-	
-	os.write(historicalTradesFile, mem.any_to_bytes(nextDate.day))
-	os.write(historicalTradesFile, mem.any_to_bytes(nextDate.month))
-	os.write(historicalTradesFile, mem.any_to_bytes(nextDate.year))
-	
-	os.close(historicalTradesFile)
-
-	// Convert trades to candles <><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
-	
-	currentCandleTimestamp : i32
-	
-	if date^ == BYBIT_ORIGIN_DATE
-	{
-		// On the first day, the first trade happens later than 00:00:00 UTC, and so the first candle does as well
-		currentCandleTimestamp = BYBIT_ORIGIN_MINUTE_TIMESTAMP
-
-		// In the event of this being the first day of data, there is no previous day last trade, so use the first trade instead
-		previousDayLastTrade = orderedTrades[0]
-	}
-	else
-	{
-		currentCandleTimestamp = DayMonthYear_ToTimestamp(date^)
-	}
-	
-	candle : Candle
-
-	// First candle will open at the close of the previous candle
-	candle.open = previousDayLastTrade.price
-	candle.high = previousDayLastTrade.price
-	candle.low = previousDayLastTrade.price
-	candle.close = previousDayLastTrade.price
-	
-	candlesAdded := 0
-	
-	for trade in orderedTrades
-	{
-		// This is a for instead of an if to handle cases where the next trade is more than a minute after the last trade
-		// Keep adding empty minutes until we're up to the minute of the trade
-		for trade.timestamp >= currentCandleTimestamp + 60
-		{
-			currentCandleTimestamp += 60
-			candles[candlesAdded] = candle
-			candlesAdded += 1
-			candle.open = candle.close
-			candle.high = candle.close
-			candle.low = candle.close
-			candle.volume = 0
-		}
-
-		if trade.price > candle.high
-		{
-			candle.high = trade.price
-		}
-		if trade.price < candle.low
-		{
-			candle.low = trade.price
-		}
-
-		candle.close = trade.price
-
-		candle.volume += trade.volume
-	}
-	
-	nextDayTimestamp := DayMonthYear_ToTimestamp(nextDate)
-
-	// Close final candle
-	// This for is to handle the case where no new trades have been made during the final minute(s) of the day
-	// Will create empty candles up until the new day
-	for currentCandleTimestamp < nextDayTimestamp
-	{
-		candles[candlesAdded] = candle
-		candlesAdded += 1
-		currentCandleTimestamp += 60
-		candle.open = candle.close
-		candle.high = candle.close
-		candle.low = candle.close
-		candle.volume = 0
-	}
-
-	// Append to local historical candles file <><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
-
-	if candlesAdded != 1440 && date^ != BYBIT_ORIGIN_DATE
-	{
-		// This isn't necessarily a problem for the first day of data, given that trades didn't begin at 00:00:00 on that day
-		fmt.println("PROBLEM!!! Added", candlesAdded, "candles to local file, should be 1440")
-	}
-
-	historicalCandlesFile : os.Handle
-	historicalCandlesFile, ok = os.open(MINUTE_CANDLES_FILE, os.O_RDWR)
-
-	os.seek(historicalCandlesFile, 0, os.SEEK_END)
-	
-	_, writeLocalFileError = os.write(historicalCandlesFile, slice.to_bytes(candles[:candlesAdded]))
-	
-	if writeLocalFileError != 0
-	{
-		fmt.println(writeLocalFileError)
-	}
-
-	os.close(historicalCandlesFile)
-	
-	candlesLen^ = candlesAdded
-	date^ = nextDate
-}
-
-LoadTradesBetween :: proc(start : i32, end : i32, buffer : ^[dynamic]Trade)
-{
-	file, ok := os.open(TRADES_FILE, os.O_RDWR)
-	defer os.close(file)
-	
-	if ok != 0
-	{
-		fmt.println("LoadTradesBetween os.open Error:", ok)
-		return
-	}
-	
-	fileSize : i64
-	fileSize, ok = os.file_size(file)
-	
-	if ok != 0
-	{
-		fmt.println("LoadTradesBetween os.file_size Error:", ok)
-	}
-	
-	DATE_SIZE :: size_of(DayMonthYear)
-
-	min : i32 = 0
-	max : i32 = i32((fileSize - DATE_SIZE) / size_of(Trade))
-	
-	start := start
-	end := end
-
-	startIndex : i32 = ---
-	endIndex : i32 = ---
-
-	timestampBytes : [size_of(i32)]u8 = ---
-	integer, err := os.read_at(file, timestampBytes[:], fileSize - size_of(Trade))
-	lastTimestamp := transmute(i32)timestampBytes
-	
-	if end > lastTimestamp
-	{
-		end = lastTimestamp
-		endIndex = max
-	}
-	else
-	{
-		// Binary search for end
-		for
-		{
-			mid := (max - min) / 2 + min
-			
-			integer, err := os.read_at(file, timestampBytes[:], i64(mid) * size_of(Trade) + DATE_SIZE)
-		
-			midTimestamp := transmute(i32)timestampBytes
-
-			if midTimestamp < end
-			{
-				min = mid + 1
-			}
-			else
-			{
-				max = mid
-			}
-			
-			if min == max
-			{
-				break
-			}
-		}
-
-		endIndex = min
-	}
-
-	integer, err = os.read_at(file, timestampBytes[:], DATE_SIZE)
-	firstTimestamp := transmute(i32)timestampBytes
-	
-	if start < firstTimestamp
-	{
-		start = firstTimestamp
-		startIndex = 0
-	}
-	else
-	{
-		// Binary search for start
-		min = 0
-		max = endIndex
-		
-		for
-		{
-			mid := (max - min) / 2 + min
-			
-			integer, err := os.read_at(file, timestampBytes[:], i64(mid) * size_of(Trade) + DATE_SIZE)
-		
-			midTimestamp := transmute(i32)timestampBytes
-			
-			if midTimestamp < start
-			{
-				min = mid + 1
-			}
-			else
-			{
-				max = mid
-			}
-			
-			if min == max
-			{
-				break
-			}
-		}
-
-		startIndex = min
-	}
-	
-	non_zero_resize(buffer, int(endIndex - startIndex))
-	
-	integer, err = os.read_at(file, slice.reinterpret([]u8, buffer[:]), i64(startIndex) * size_of(Trade) + DATE_SIZE)
 }

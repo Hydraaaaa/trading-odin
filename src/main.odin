@@ -22,15 +22,15 @@ VERTICAL_LABEL_PADDING :: HORIZONTAL_LABEL_PADDING - 2
 
 FONT_SIZE :: 14
 
-CANDLE_TIMEFRAME_INCREMENTS : [10]i32 : {60, 300, 900, 1800, 3600, 10_800, 21_600, 43_200, 86_400, 604_800}
-
 main :: proc()
 {
 	using raylib
 	
 	profilerData : ProfilerData
-	
+
 	SetConfigFlags({.WINDOW_RESIZABLE})
+	
+	SetTraceLogLevel(TraceLogLevel.WARNING)
 
 	InitWindow(INITIAL_SCREEN_WIDTH, INITIAL_SCREEN_HEIGHT, "Trading")
 	defer CloseWindow()
@@ -50,94 +50,27 @@ main :: proc()
 
 	font := LoadFontEx("roboto-bold.ttf", FONT_SIZE, nil, 0)
 	
-	candleData : [TIMEFRAME_COUNT]CandleList
-
-	dateToDownload := LoadDateToDownload()
-
-	candleData[Timeframe.MINUTE].candles = LoadMinuteCandles()
-	candleData[Timeframe.MINUTE].offset = BYBIT_ORIGIN_MINUTE_TIMESTAMP
-	defer delete(candleData[Timeframe.MINUTE].candles)
+	chart : Chart
 	
-	candleTimeframeIncrements := CANDLE_TIMEFRAME_INCREMENTS
+	chart.dateToDownload = LoadDateToDownload()
 
-	// Time is UTC, which matches Bybit's historical data upload time
-	currentDate := Timestamp_ToDayMonthYear(i32(time.now()._nsec / i64(time.Second)) - TIMESTAMP_2010)
-	
-	downloadThread : ^thread.Thread
-	downloadedCandles : [1440]Candle
-	downloadedCandlesLen : int // This should only not be 1440 for the very first day of data
-	downloading := false
-	
-	if dateToDownload != currentDate
-	{
-		downloadThread = thread.create_and_start_with_poly_data3(&dateToDownload, &downloadedCandles, &downloadedCandlesLen, DownloadDay)
+	chart.candles[Timeframe.MINUTE].candles = LoadMinuteCandles()
+	chart.candles[Timeframe.MINUTE].offset = BYBIT_ORIGIN_MINUTE_TIMESTAMP
 
-		downloading = true
-
-		if len(candleData[Timeframe.MINUTE].candles) == 0
-		{
-			fmt.println("Waiting for first day's data to finish downloading before launching visual application")
-			thread.join(downloadThread)
-			append(&candleData[Timeframe.MINUTE].candles, ..downloadedCandles[:downloadedCandlesLen])
-			thread.destroy(downloadThread)
-			downloadThread = thread.create_and_start_with_poly_data3(&dateToDownload, &downloadedCandles, &downloadedCandlesLen, DownloadDay)
-		}
-	}
-
-	// Create higher timeframe candles ><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
+	// Init chart.candles offsets and timeframes
 	{
 		prevTimeframe := Timeframe.MINUTE
-		
 		for timeframe in Timeframe.MINUTE_5 ..= Timeframe.WEEK
 		{
-			candleData[timeframe].timeframe = timeframe
+			chart.candles[timeframe].offset = Candle_FloorTimestamp(chart.candles[prevTimeframe].offset, timeframe)
+			chart.candles[timeframe].timeframe = timeframe
 
-			prevCandles := candleData[prevTimeframe].candles[:]
-
-			prevCandlesLen := len(prevCandles)
-			
-			timeframeDivisor := int(candleTimeframeIncrements[timeframe] / candleTimeframeIncrements[prevTimeframe])
-			
-			candleData[timeframe].offset = Candle_FloorTimestamp(candleData[prevTimeframe].offset, timeframe)
-			
-			// + 1 accounts for a higher timeframe candle at the beginning with only partial data
-			reserve(&candleData[timeframe].candles, prevCandlesLen / timeframeDivisor + 1)
-			
-			// Separately calculate the subcandles of the first candle to handle the case where the candle timestamps aren't aligned
-			firstCandleComponentCount := timeframeDivisor - int((candleData[prevTimeframe].offset - candleData[timeframe].offset) / candleTimeframeIncrements[prevTimeframe])
-			
-			start := 0
-			end := firstCandleComponentCount
-			
-			if end == 0
-			{
-				end += timeframeDivisor
-			}
-			
-			for end <= prevCandlesLen
-			{
-				append(&candleData[timeframe].candles, Candle_Merge(..prevCandles[start:end]))
-				
-				start = end
-				end += timeframeDivisor
-			}
-			
-			// Create a final partial candle if applicable (like on weekly candles)
-			if start < prevCandlesLen
-			{
-				append(&candleData[timeframe].candles, Candle_Merge(..prevCandles[start:prevCandlesLen]))
-			}
-			
 			prevTimeframe = timeframe
 		}
 
-		// Monthly candles
-		candleData[Timeframe.MONTH].timeframe = Timeframe.MONTH
-
-		// Find floored month offset + start index for the candle creation
 		monthlyIncrements := MONTHLY_INCREMENTS
 		
-		fourYearTimestamp := candleData[prevTimeframe].offset % FOUR_YEARS
+		fourYearTimestamp := chart.candles[prevTimeframe].offset % FOUR_YEARS
 
 		fourYearIndex := 47
 		
@@ -146,57 +79,46 @@ main :: proc()
 			fourYearIndex -= 1
 		}
 
-		candleData[Timeframe.MONTH].offset = candleData[prevTimeframe].offset - fourYearTimestamp + monthlyIncrements[fourYearIndex]
-
-		// Create candles
-		dayCandles := candleData[Timeframe.DAY].candles[:]
-
-		daysPerMonth := DAYS_PER_MONTH
-		
-		start := 0
-		
-		offsetDate := Timestamp_ToDayMonthYear(candleData[Timeframe.MONTH].offset)
-		
-		offsetDate.month += 1
-		
-		if offsetDate.month > 12
-		{
-			offsetDate.month = 1
-			offsetDate.year += 1
-		}
-		
-		end := int(DayMonthYear_ToTimestamp(DayMonthYear{1, offsetDate.month, offsetDate.year}) - candleData[Timeframe.DAY].offset) / DAY
-
-		dayCandlesLen := len(dayCandles)
-			
-		for end <= dayCandlesLen
-		{
-			append(&candleData[Timeframe.MONTH].candles, Candle_Merge(..dayCandles[start:end]))
-			
-			start = end
-		
-			fourYearIndex += 1
-			
-			if fourYearIndex > 47
-			{
-				fourYearIndex = 0
-			}
-
-			end += daysPerMonth[fourYearIndex]
-		}
-		
-		// Create a final partial candle when applicable
-		if start < dayCandlesLen
-		{
-			append(&candleData[Timeframe.MONTH].candles, Candle_Merge(..dayCandles[start:dayCandlesLen]))
-		}
+		chart.candles[Timeframe.MONTH].offset = chart.candles[prevTimeframe].offset - fourYearTimestamp + monthlyIncrements[fourYearIndex]
+		chart.candles[Timeframe.MONTH].timeframe = Timeframe.MONTH
 	}
+
+	defer delete(chart.candles[Timeframe.MINUTE].candles)
 	
+	// Time is UTC, which matches Bybit's historical data upload time
+	currentDate := Timestamp_ToDayMonthYear(i32(time.now()._nsec / i64(time.Second)) - TIMESTAMP_2010)
+	
+	downloadThread : ^thread.Thread
+	downloadedTrades : []Trade
+	downloading := false
+	
+	chart.hourVolumeProfilePool = LoadHourVolumeProfiles()
+	
+	if chart.dateToDownload != currentDate
+	{
+		downloadThread = thread.create_and_start_with_poly_data2(&chart.dateToDownload, &downloadedTrades, DownloadDay)
+
+		downloading = true
+	}
+
+	if len(chart.candles[Timeframe.MINUTE].candles) == 0
+	{
+		fmt.println("Waiting for first day's data to finish downloading before launching visual application")
+		thread.join(downloadThread)
+		AppendDay(&downloadedTrades, &chart)
+		thread.destroy(downloadThread)
+		downloadThread = thread.create_and_start_with_poly_data2(&chart.dateToDownload, &downloadedTrades, DownloadDay)
+	}
+	else
+	{
+		Chart_CreateHTFCandles(&chart)
+	}
+
 	scaleData : ScaleData
 
 	scaleData.horizontalZoom = 1
 	scaleData.verticalZoom = 1
-	scaleData.horizontalScale = f64(CandleList_IndexToDuration(candleData[START_ZOOM_INDEX], 0) / (ZOOM_THRESHOLD * 2))
+	scaleData.horizontalScale = f64(CandleList_IndexToDuration(chart.candles[START_ZOOM_INDEX], 0) / (ZOOM_THRESHOLD * 2))
 	scaleData.logScale = true
 
 	cameraPosX : i32
@@ -212,9 +134,9 @@ main :: proc()
 
 	// Set initial camera X position to show the most recent candle on the right
 	{
-		candleIndex := i32(len(candleData[zoomIndex].candles) - 1)
+		candleIndex := i32(len(chart.candles[zoomIndex].candles) - 1)
 
-		cameraPosX = i32(f64(CandleList_IndexToTimestamp(candleData[zoomIndex], i32(len(candleData[zoomIndex].candles))) + CandleList_IndexToDuration(candleData[zoomIndex], candleIndex)) / scaleData.horizontalScale - INITIAL_SCREEN_WIDTH + 70)
+		cameraPosX = i32(f64(CandleList_IndexToTimestamp(chart.candles[zoomIndex], i32(len(chart.candles[zoomIndex].candles))) + CandleList_IndexToDuration(chart.candles[zoomIndex], candleIndex)) / scaleData.horizontalScale - INITIAL_SCREEN_WIDTH + 70)
 	}
 
 	cameraTimestamp := i32(f64(cameraPosX) * scaleData.horizontalScale)
@@ -224,7 +146,7 @@ main :: proc()
 	// Slice of all candles that currently fit within the width of the screen
 	visibleCandles : []Candle
 	visibleCandlesStartIndex : i32
-	visibleCandles, visibleCandlesStartIndex = CandleList_CandlesBetweenTimestamps(candleData[zoomIndex], cameraTimestamp, cameraEndTimestamp)
+	visibleCandles, visibleCandlesStartIndex = CandleList_CandlesBetweenTimestamps(chart.candles[zoomIndex], cameraTimestamp, cameraEndTimestamp)
 
 	highestCandle, highestCandleIndex := Candle_HighestHigh(visibleCandles)
 	lowestCandle, lowestCandleIndex := Candle_LowestLow(visibleCandles)
@@ -262,6 +184,14 @@ main :: proc()
 	}
 
 	scaleData.verticalScale = initialVerticalScale
+	
+	testCandle := chart.candles[Timeframe.HOUR].candles[len(chart.candles[Timeframe.HOUR].candles) - 5]
+	
+	testStart := CandleList_IndexToTimestamp(chart.candles[zoomIndex], visibleCandlesStartIndex)
+	testEnd := CandleList_IndexToTimestamp(chart.candles[zoomIndex], visibleCandlesStartIndex + i32(len(visibleCandles)))
+	
+	testProfile := VolumeProfile_Create(testStart, testEnd, highestCandle.high, lowestCandle.low, chart.candles[Timeframe.HOUR], chart.hourVolumeProfilePool)
+	defer VolumeProfile_Destroy(testProfile)
 
 	// UPDATE <><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
 	for !WindowShouldClose()
@@ -380,7 +310,7 @@ main :: proc()
 			zoomIndex = Timeframe(TIMEFRAME_COUNT - 1)
 			
 			for int(zoomIndex) > 0 &&
-			    CandleList_IndexToWidth(candleData[zoomIndex - Timeframe(1)], 0, scaleData) > ZOOM_THRESHOLD
+			    CandleList_IndexToWidth(chart.candles[zoomIndex - Timeframe(1)], 0, scaleData) > ZOOM_THRESHOLD
 			{
 				zoomIndex -= Timeframe(1)
 			}
@@ -398,69 +328,16 @@ main :: proc()
 				thread.destroy(downloadThread)
 				
 				// 404 Not Found
-				if downloadedCandlesLen == -1
+				if downloadedTrades == nil
 				{
 					downloading = false
 				}
 				else
 				{
-					prevTimeframe := Timeframe.MINUTE
-					prevMinuteCandleCount := len(candleData[Timeframe.MINUTE].candles)
-					
-					append(&candleData[Timeframe.MINUTE].candles, ..downloadedCandles[:])
-
-					prevCandles := candleData[Timeframe.MINUTE].candles[prevMinuteCandleCount:]
-					
-					for timeframe in Timeframe.MINUTE_5 ..= Timeframe.DAY
+					AppendDay(&downloadedTrades, &chart)
+					if chart.dateToDownload != currentDate
 					{
-						prevCandlesLen := len(prevCandles)
-						
-						startingCandlesLen := len(candleData[timeframe].candles)
-						
-						timeframeDivisor := int(candleTimeframeIncrements[timeframe] / candleTimeframeIncrements[prevTimeframe])
-						
-						start := 0
-						end := timeframeDivisor
-						
-						for end <= prevCandlesLen
-						{
-							append(&candleData[timeframe].candles, Candle_Merge(..prevCandles[start:end]))
-							
-							start = end
-							end += timeframeDivisor
-						}
-						
-						prevTimeframe = timeframe
-						prevCandles = candleData[timeframe].candles[startingCandlesLen:]
-					}
-					
-					newDayCandle := slice.last(candleData[Timeframe.DAY].candles[:])
-					
-					// Tuesday because dateToDownload has already been shifted forward one day
-					if Timestamp_ToDayOfWeek(DayMonthYear_ToTimestamp(dateToDownload)) == .TUESDAY
-					{
-						append(&candleData[Timeframe.WEEK].candles, newDayCandle)
-					}
-					else
-					{
-						weekCandleIndex := len(candleData[Timeframe.WEEK].candles) - 1
-						candleData[Timeframe.WEEK].candles[weekCandleIndex] = Candle_Merge(candleData[Timeframe.WEEK].candles[weekCandleIndex], newDayCandle)
-					}
-					
-					// 2nd day of month because dateToDownload has already been shifted forward one day
-					if dateToDownload.day == 2
-					{
-						append(&candleData[Timeframe.MONTH].candles, newDayCandle)
-					}
-					else
-					{
-						monthCandleIndex := len(candleData[Timeframe.MONTH].candles) - 1
-						candleData[Timeframe.MONTH].candles[monthCandleIndex] = Candle_Merge(candleData[Timeframe.MONTH].candles[monthCandleIndex], newDayCandle)
-					}
-			
-					if dateToDownload != currentDate
-					{
-						downloadThread = thread.create_and_start_with_poly_data3(&dateToDownload, &downloadedCandles, &downloadedCandlesLen, DownloadDay)
+						downloadThread = thread.create_and_start_with_poly_data2(&chart.dateToDownload, &downloadedTrades, DownloadDay)
 					}
 					else
 					{
@@ -473,7 +350,7 @@ main :: proc()
 		// Update visibleCandles
 		cameraTimestamp = Timestamp_FromPixelX(cameraPosX, scaleData)
 		cameraEndTimestamp = Timestamp_FromPixelX(cameraPosX + screenWidth, scaleData)
-		visibleCandles, visibleCandlesStartIndex = CandleList_CandlesBetweenTimestamps(candleData[zoomIndex], cameraTimestamp, cameraEndTimestamp)
+		visibleCandles, visibleCandlesStartIndex = CandleList_CandlesBetweenTimestamps(chart.candles[zoomIndex], cameraTimestamp, cameraEndTimestamp)
 		highestCandle, highestCandleIndex = Candle_HighestHigh(visibleCandles)
 		lowestCandle, lowestCandleIndex = Candle_LowestLow(visibleCandles)
 
@@ -487,15 +364,15 @@ main :: proc()
 			// As we are doing the opposite conversion, the mouse will always be less than or equal to the candles
 			timestamp : i32 = Timestamp_FromPixelX(GetMouseX() + cameraPosX + 1, scaleData)
 
-			if CandleList_IndexToTimestamp(candleData[zoomIndex], i32(len(visibleCandles)) + visibleCandlesStartIndex - 1) < timestamp
+			if CandleList_IndexToTimestamp(chart.candles[zoomIndex], i32(len(visibleCandles)) + visibleCandlesStartIndex - 1) < timestamp
 			{
 				cursorCandleIndex = i32(len(visibleCandles)) - 1 + visibleCandlesStartIndex
-				cursorCandle = candleData[zoomIndex].candles[cursorCandleIndex]
+				cursorCandle = chart.candles[zoomIndex].candles[cursorCandleIndex]
 			}
 			else
 			{
-				cursorCandleIndex = CandleList_TimestampToIndex(candleData[zoomIndex], timestamp)
-				cursorCandle = candleData[zoomIndex].candles[cursorCandleIndex]
+				cursorCandleIndex = CandleList_TimestampToIndex(chart.candles[zoomIndex], timestamp)
+				cursorCandle = chart.candles[zoomIndex].candles[cursorCandleIndex]
 			}
 		}
 
@@ -1007,11 +884,11 @@ main :: proc()
 
 		if zoomIndexHTF < Timeframe(TIMEFRAME_COUNT)
 		{
-			visibleHTFCandles, visibleHTFCandlesStartIndex := CandleList_CandlesBetweenTimestamps(candleData[zoomIndexHTF], cameraTimestamp, cameraEndTimestamp)
+			visibleHTFCandles, visibleHTFCandlesStartIndex := CandleList_CandlesBetweenTimestamps(chart.candles[zoomIndexHTF], cameraTimestamp, cameraEndTimestamp)
 			for candle, i in visibleHTFCandles
 			{
-				xPos : i32 = CandleList_IndexToPixelX(candleData[zoomIndexHTF], i32(i) + visibleHTFCandlesStartIndex, scaleData) - cameraPosX
-				candleWidth : i32 = CandleList_IndexToWidth(candleData[zoomIndexHTF], i32(i) + visibleHTFCandlesStartIndex, scaleData)
+				xPos : i32 = CandleList_IndexToPixelX(chart.candles[zoomIndexHTF], i32(i) + visibleHTFCandlesStartIndex, scaleData) - cameraPosX
+				candleWidth : i32 = CandleList_IndexToWidth(chart.candles[zoomIndexHTF], i32(i) + visibleHTFCandlesStartIndex, scaleData)
 
 				scaledOpen : i32 = Price_ToPixelY(candle.open, scaleData)
 				scaledClose : i32 = Price_ToPixelY(candle.close, scaleData)
@@ -1042,12 +919,14 @@ main :: proc()
 				}
 			}
 		}
+		
+		DrawVolumeProfile(0, 300, cameraPosY, testProfile, scaleData)
 
 		// Draw Candles
 		for candle, i in visibleCandles
 		{
-			xPos : i32 = CandleList_IndexToPixelX(candleData[zoomIndex], i32(i) + visibleCandlesStartIndex, scaleData) - cameraPosX
-			candleWidth : i32 = CandleList_IndexToWidth(candleData[zoomIndex], i32(i) + visibleCandlesStartIndex, scaleData)
+			xPos : i32 = CandleList_IndexToPixelX(chart.candles[zoomIndex], i32(i) + visibleCandlesStartIndex, scaleData) - cameraPosX
+			candleWidth : i32 = CandleList_IndexToWidth(chart.candles[zoomIndex], i32(i) + visibleCandlesStartIndex, scaleData)
 
 			scaledOpen : i32 = Price_ToPixelY(candle.open, scaleData)
 			scaledClose : i32 = Price_ToPixelY(candle.close, scaleData)
@@ -1156,8 +1035,8 @@ main :: proc()
 			DrawPixel(i, mouseY, crosshairColor)
 		}
 		
-		xPos : i32 = CandleList_IndexToPixelX(candleData[zoomIndex], cursorCandleIndex, scaleData) - cameraPosX
-		candleWidth : i32 = CandleList_IndexToWidth(candleData[zoomIndex], cursorCandleIndex, scaleData)
+		xPos : i32 = CandleList_IndexToPixelX(chart.candles[zoomIndex], cursorCandleIndex, scaleData) - cameraPosX
+		candleWidth : i32 = CandleList_IndexToWidth(chart.candles[zoomIndex], cursorCandleIndex, scaleData)
 
 		for i : i32 = 0; i < screenHeight; i += 3
 		{
@@ -1165,7 +1044,7 @@ main :: proc()
 		}
 		
 		// Draw current price line
-		lastCandle := slice.last(candleData[zoomIndex].candles[:])
+		lastCandle := slice.last(chart.candles[zoomIndex].candles[:])
 		priceY := Price_ToPixelY(lastCandle.close, scaleData) - cameraPosY
 		priceColor : Color
 		
@@ -1197,7 +1076,7 @@ main :: proc()
 	    {
 			fmt.bprintf(textBuffer[:], "%.2f\x00", highestCandle.high)
 			textRect = MeasureTextEx(font, cstring(&textBuffer[0]), FONT_SIZE, 0)
-			labelPosX = f32(CandleList_IndexToPixelX(candleData[zoomIndex], highestCandleIndex, scaleData) - cameraPosX) - textRect.x / 2 + candleCenterOffset
+			labelPosX = f32(CandleList_IndexToPixelX(chart.candles[zoomIndex], highestCandleIndex, scaleData) - cameraPosX) - textRect.x / 2 + candleCenterOffset
 			labelPosY = f32(Price_ToPixelY(highestCandle.high, scaleData) - cameraPosY) - textRect.y - VERTICAL_LABEL_PADDING
 
 			if labelPosX < 2
@@ -1209,7 +1088,7 @@ main :: proc()
 				labelPosX = f32(screenWidth) - textRect.x - 2
 			}
 
-			candleCenterOffset = f32(CandleList_IndexToWidth(candleData[zoomIndex], highestCandleIndex, scaleData)) / 2 - 0.5
+			candleCenterOffset = f32(CandleList_IndexToWidth(chart.candles[zoomIndex], highestCandleIndex, scaleData)) / 2 - 0.5
 			DrawTextEx(font, cstring(&textBuffer[0]), {labelPosX, labelPosY}, FONT_SIZE, 0, WHITE)
 	    }
 
@@ -1219,7 +1098,7 @@ main :: proc()
 	    {
 			fmt.bprintf(textBuffer[:], "%.2f\x00", lowestCandle.low)
 			textRect = MeasureTextEx(font, cstring(&textBuffer[0]), FONT_SIZE, 0)
-			labelPosX = f32(CandleList_IndexToPixelX(candleData[zoomIndex], lowestCandleIndex, scaleData) - cameraPosX) - textRect.x / 2 + candleCenterOffset
+			labelPosX = f32(CandleList_IndexToPixelX(chart.candles[zoomIndex], lowestCandleIndex, scaleData) - cameraPosX) - textRect.x / 2 + candleCenterOffset
 			labelPosY = f32(Price_ToPixelY(lowestCandle.low, scaleData) - cameraPosY) + VERTICAL_LABEL_PADDING
 
 			if labelPosX < 2
@@ -1231,21 +1110,21 @@ main :: proc()
 				labelPosX = f32(screenWidth) - textRect.x - 2
 			}
 
-			candleCenterOffset = f32(CandleList_IndexToWidth(candleData[zoomIndex], lowestCandleIndex, scaleData)) / 2 - 0.5
+			candleCenterOffset = f32(CandleList_IndexToWidth(chart.candles[zoomIndex], lowestCandleIndex, scaleData)) / 2 - 0.5
 			DrawTextEx(font, cstring(&textBuffer[0]), {labelPosX, labelPosY}, FONT_SIZE, 0, WHITE)
 		}
 
 		// "Downloading" text
 		if downloading
 		{
-			lastCandleIndex := i32(len(candleData[zoomIndex].candles)) - 1
-			lastCandleTimestamp := CandleList_IndexToTimestamp(candleData[zoomIndex], lastCandleIndex)
+			lastCandleIndex := i32(len(chart.candles[zoomIndex].candles)) - 1
+			lastCandleTimestamp := CandleList_IndexToTimestamp(chart.candles[zoomIndex], lastCandleIndex)
 
 			// If last candle is visible
 			if lastCandleIndex == visibleCandlesStartIndex + i32(len(visibleCandles)) - 1
 			{
-				posX := f32(Timestamp_ToPixelX(DayMonthYear_ToTimestamp(dateToDownload), scaleData) - cameraPosX) + 2
-				posY := f32(Price_ToPixelY(candleData[zoomIndex].candles[lastCandleIndex].close, scaleData) - cameraPosY) - MeasureTextEx(font, "W\x00", FONT_SIZE, 0).y / 2
+				posX := f32(Timestamp_ToPixelX(DayMonthYear_ToTimestamp(chart.dateToDownload), scaleData) - cameraPosX) + 2
+				posY := f32(Price_ToPixelY(chart.candles[zoomIndex].candles[lastCandleIndex].close, scaleData) - cameraPosY) - MeasureTextEx(font, "W\x00", FONT_SIZE, 0).y / 2
 				fmt.bprint(textBuffer[:], "Downloading\x00")
 				DrawTextEx(font, cstring(&textBuffer[0]), {posX, posY}, FONT_SIZE, 0, WHITE)
 			}
@@ -1261,12 +1140,12 @@ main :: proc()
 			
 			width := MeasureTextEx(font, cstring(&textBuffer[0]), FONT_SIZE, 0).x + HORIZONTAL_LABEL_PADDING * 2
 
-			posX := f32(CandleList_IndexToPixelX(candleData[zoomIndex], cursorCandleIndex + 1, scaleData) - cameraPosX)
+			posX := f32(CandleList_IndexToPixelX(chart.candles[zoomIndex], cursorCandleIndex + 1, scaleData) - cameraPosX)
 			posY := f32(Price_ToPixelY(mouseSnapPrice, scaleData) - cameraPosY) - f32(labelHeight) / 2
 			
 			if i32(posX + width * 2 - HORIZONTAL_LABEL_PADDING) > screenWidth
 			{
-				posX -= width + f32(CandleList_IndexToWidth(candleData[zoomIndex], cursorCandleIndex, scaleData))
+				posX -= width + f32(CandleList_IndexToWidth(chart.candles[zoomIndex], cursorCandleIndex, scaleData))
 			}
 
 			DrawRectangleRounded({posX, posY, width, f32(labelHeight)}, 0.5, 10, labelBackground)
@@ -1323,7 +1202,7 @@ main :: proc()
 		
 		// Draw Cursor Timestamp Label
 		{
-			cursorTimestamp := CandleList_IndexToTimestamp(candleData[zoomIndex], cursorCandleIndex)
+			cursorTimestamp := CandleList_IndexToTimestamp(chart.candles[zoomIndex], cursorCandleIndex)
 
 			cursorLabelBuffer : [32]u8
 

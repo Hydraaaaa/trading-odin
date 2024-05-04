@@ -26,8 +26,6 @@ Timeframe :: enum
 	//YEAR,
 }
 
-TIMEFRAME_COUNT :: 11
-
 CandleList_TimestampToIndex :: proc(candleList : CandleList, timestamp : i32) -> i32
 {
 	timeframeIncrements := CANDLE_TIMEFRAME_INCREMENTS
