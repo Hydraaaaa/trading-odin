@@ -38,6 +38,7 @@ LoadDateToDownload :: proc() -> DayMonthYear
 	}
 }
 
+// Allocates candles
 LoadMinuteCandles :: proc() -> [dynamic]Candle
 {
 	if !os.is_file(MINUTE_CANDLES_FILE)

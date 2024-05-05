@@ -32,7 +32,7 @@ VolumeProfileBucket :: struct
 }
 
 // Around 1000x faster if bucketSize is a multiple of provided pool's bucketSize
-VolumeProfile_Create :: proc(startTimestamp : i32, endTimestamp : i32, high : f32, low : f32, candles : CandleList, pool : VolumeProfilePool, bucketSize : f32 = 5) -> VolumeProfile
+VolumeProfile_Create :: proc(startTimestamp : i32, endTimestamp : i32, high : f32, low : f32, zoomIndex : Timeframe, chart : Chart, bucketSize : f32 = 5) -> VolumeProfile
 {
     if bucketSize <= 0
     {
@@ -41,7 +41,7 @@ VolumeProfile_Create :: proc(startTimestamp : i32, endTimestamp : i32, high : f3
     }
 
     // If bucketSize doesn't align with pool, revert to slower method
-    if math.mod(bucketSize, f32(pool.bucketSize)) != 0
+    if math.mod(bucketSize, f32(chart.hourVolumeProfilePool.bucketSize)) != 0
     {
         fmt.println("WARNING: VolumeProfile_Create bucketSize mismatch, will be very slow")
 
@@ -62,11 +62,11 @@ VolumeProfile_Create :: proc(startTimestamp : i32, endTimestamp : i32, high : f3
     
     profile.buckets = make([]VolumeProfileBucket, int((topPrice - profile.bottomPrice) / bucketSize))
     
-    startIndex := CandleList_TimestampToIndex(candles, startTimestamp)
-    startIndexTimestamp := CandleList_IndexToTimestamp(candles, startIndex)
+    startIndex := CandleList_TimestampToIndex(chart.candles[Timeframe.HOUR], startTimestamp)
+    startIndexTimestamp := CandleList_IndexToTimestamp(chart.candles[Timeframe.HOUR], startIndex)
     
-    endIndex := CandleList_TimestampToIndex(candles, endTimestamp)
-    endIndexTimestamp := CandleList_IndexToTimestamp(candles, endIndex)
+    endIndex := CandleList_TimestampToIndex(chart.candles[Timeframe.HOUR], endTimestamp)
+    endIndexTimestamp := CandleList_IndexToTimestamp(chart.candles[Timeframe.HOUR], endIndex)
     
     tradesStartTimestamp := startIndexTimestamp
     tradesEndTimestamp := startTimestamp
@@ -136,13 +136,16 @@ VolumeProfile_Create :: proc(startTimestamp : i32, endTimestamp : i32, high : f3
     
     // Load hourly profiles
     profileIndexOffset := i32(low / bucketSize)
+    //fmt.println("Low", low, "/", bucketSize)
 
-    for profileHeader in pool.headers[startIndex:endIndex]
+    // TODO: Indices haven't been adjusted to hours
+    for profileHeader in chart.hourVolumeProfilePool.headers[startIndex:endIndex]
     {
-        for bucket, i in pool.buckets[profileHeader.bucketPoolIndex:profileHeader.bucketPoolIndex + profileHeader.bucketCount]
+        for bucket, i in chart.hourVolumeProfilePool.buckets[profileHeader.bucketPoolIndex:profileHeader.bucketPoolIndex + profileHeader.bucketCount]
         {
-            profile.buckets[(profileHeader.relativeIndexOffset * pool.bucketSize / i32(bucketSize)) - profileIndexOffset + i32(i)].buyVolume += bucket.buyVolume
-            profile.buckets[(profileHeader.relativeIndexOffset * pool.bucketSize / i32(bucketSize)) - profileIndexOffset + i32(i)].sellVolume += bucket.sellVolume
+            //fmt.println(profileHeader.relativeIndexOffset, profileIndexOffset, i)
+            profile.buckets[(profileHeader.relativeIndexOffset * chart.hourVolumeProfilePool.bucketSize / i32(bucketSize)) - profileIndexOffset + i32(i)].buyVolume += bucket.buyVolume
+            profile.buckets[(profileHeader.relativeIndexOffset * chart.hourVolumeProfilePool.bucketSize / i32(bucketSize)) - profileIndexOffset + i32(i)].sellVolume += bucket.sellVolume
         }
     }
 

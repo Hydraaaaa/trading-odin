@@ -129,8 +129,15 @@ main :: proc()
 	verticalZoomLevel : f32 = 0
 
 	dragging := false
+	draggingRuler := false
 	rightDragging := false
 	rightDraggingPriceStart : f32
+	
+	dragStartCandleIndex : i32
+	dragStartZoomIndex : Timeframe
+
+	dragStartRulerTimestamp : i32
+	dragEndRulerTimestamp : i32
 
 	// Set initial camera X position to show the most recent candle on the right
 	{
@@ -190,7 +197,8 @@ main :: proc()
 	testStart := CandleList_IndexToTimestamp(chart.candles[zoomIndex], visibleCandlesStartIndex)
 	testEnd := CandleList_IndexToTimestamp(chart.candles[zoomIndex], visibleCandlesStartIndex + i32(len(visibleCandles)))
 	
-	testProfile := VolumeProfile_Create(testStart, testEnd, highestCandle.high, lowestCandle.low, chart.candles[Timeframe.HOUR], chart.hourVolumeProfilePool)
+	testProfile : VolumeProfile
+	//testProfile = VolumeProfile_Create(testStart, testEnd, highestCandle.high, lowestCandle.low, chart.candles[Timeframe.HOUR], chart.hourVolumeProfilePool)
 	defer VolumeProfile_Destroy(testProfile)
 
 	// UPDATE <><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
@@ -245,18 +253,59 @@ main :: proc()
 		// Camera Panning
 		if IsMouseButtonPressed(.LEFT)
 		{
-			dragging = true
+			dragging = !IsKeyDown(KeyboardKey.LEFT_SHIFT)
+			draggingRuler = IsKeyDown(KeyboardKey.LEFT_SHIFT)
+			dragStartCandleIndex = cursorCandleIndex
+			dragStartZoomIndex = zoomIndex
 		}
 
 		if IsMouseButtonReleased(.LEFT)
 		{
 			dragging = false
+			draggingRuler = false
 		}
 
 		if dragging
 		{
 			cameraPosX -= i32(GetMouseDelta().x)
 			cameraPosY -= i32(GetMouseDelta().y)
+		}
+		
+		if draggingRuler
+		{
+			if CandleList_IndexToTimestamp(chart.candles[dragStartZoomIndex], dragStartCandleIndex) > CandleList_IndexToTimestamp(chart.candles[zoomIndex], cursorCandleIndex)
+			{
+				dragStartRulerTimestamp = CandleList_IndexToTimestamp(chart.candles[zoomIndex], cursorCandleIndex)
+				dragEndRulerTimestamp = CandleList_IndexToTimestamp(chart.candles[dragStartZoomIndex], dragStartCandleIndex + 1)
+			}
+			else
+			{
+				dragStartRulerTimestamp = CandleList_IndexToTimestamp(chart.candles[dragStartZoomIndex], dragStartCandleIndex)
+				dragEndRulerTimestamp = CandleList_IndexToTimestamp(chart.candles[zoomIndex], cursorCandleIndex + 1)
+			}
+
+			if GetMouseDelta().x != 0
+			{
+				//VolumeProfile_Destroy(testProfile)
+				
+				rulerZoomIndex : Timeframe
+				
+				if dragStartZoomIndex > zoomIndex
+				{
+					rulerZoomIndex = zoomIndex
+				}
+				else
+				{
+					rulerZoomIndex = dragStartZoomIndex
+				}
+
+				startIndex := CandleList_TimestampToIndex(chart.candles[rulerZoomIndex], dragStartRulerTimestamp)
+				endIndex := CandleList_TimestampToIndex(chart.candles[rulerZoomIndex], dragEndRulerTimestamp)
+				highCandle, _ := Candle_HighestHigh(chart.candles[rulerZoomIndex].candles[startIndex:endIndex])
+				lowCandle, _ := Candle_LowestLow(chart.candles[rulerZoomIndex].candles[startIndex:endIndex])
+
+				testProfile = VolumeProfile_Create(dragStartRulerTimestamp, dragEndRulerTimestamp, highCandle.high, lowCandle.low, rulerZoomIndex, chart)
+			}
 		}
 
 		// Vertical Scale Adjustment
