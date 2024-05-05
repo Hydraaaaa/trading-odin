@@ -259,5 +259,8 @@ VolumeProfile_CreateFromCandles :: proc(candles : []Candle, high : f32, low : f3
 
 VolumeProfile_Destroy :: proc(profile : VolumeProfile)
 {
-    delete(profile.buckets)
+    if profile.bucketSize != 0
+    {
+        delete(profile.buckets)
+    }
 }
