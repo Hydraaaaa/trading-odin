@@ -60,11 +60,13 @@ CandleList_TimestampToIndex :: proc(candleList : CandleList, timestamp : i32) ->
 
 		if index < 0
 		{
-			index = 0
+			fmt.println("TimestampToIndex Out of bounds < 0")
+			//index = 0
 		}
 		else if index > lastCandleIndex
 		{
-			index = lastCandleIndex		
+			fmt.println("TimestampToIndex Out of bounds >= len")
+			//index = lastCandleIndex		
 		}
 		
 		return index
@@ -77,11 +79,13 @@ CandleList_TimestampToIndex :: proc(candleList : CandleList, timestamp : i32) ->
 	
 	if index < 0
 	{
-		index = 0
+		fmt.println("TimestampToIndex Out of bounds < 0")
+		//index = 0
 	}
 	else if index > lastCandleIndex
 	{
-		index = lastCandleIndex
+		fmt.println("TimestampToIndex Out of bounds >= len")
+		//index = lastCandleIndex		
 	}
 
 	return index
