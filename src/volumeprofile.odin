@@ -63,9 +63,13 @@ VolumeProfile_Create :: proc(startTimestamp : i32, endTimestamp : i32, high : f3
     profile.buckets = make([]VolumeProfileBucket, int((topPrice - profile.bottomPrice) / bucketSize))
     
     startIndex := CandleList_TimestampToIndex(chart.candles[Timeframe.HOUR], startTimestamp)
+    startIndex = math.max(startIndex, 0)
+    startIndex = math.min(startIndex, i32(len(chart.candles[Timeframe.HOUR].candles) - 1))
     startIndexTimestamp := CandleList_IndexToTimestamp(chart.candles[Timeframe.HOUR], startIndex)
     
     endIndex := CandleList_TimestampToIndex(chart.candles[Timeframe.HOUR], endTimestamp)
+    endIndex = math.max(endIndex, 0)
+    endIndex = math.min(endIndex, i32(len(chart.candles[Timeframe.HOUR].candles) - 1))
     endIndexTimestamp := CandleList_IndexToTimestamp(chart.candles[Timeframe.HOUR], endIndex)
     
     tradesStartTimestamp := startIndexTimestamp
@@ -136,16 +140,13 @@ VolumeProfile_Create :: proc(startTimestamp : i32, endTimestamp : i32, high : f3
     
     // Load hourly profiles
     profileIndexOffset := i32(low / bucketSize)
-    //fmt.println("Low", low, "/", bucketSize)
-
-    // TODO: Indices haven't been adjusted to hours
+    
     for profileHeader in chart.hourVolumeProfilePool.headers[startIndex:endIndex]
     {
         for bucket, i in chart.hourVolumeProfilePool.buckets[profileHeader.bucketPoolIndex:profileHeader.bucketPoolIndex + profileHeader.bucketCount]
         {
-            //fmt.println(profileHeader.relativeIndexOffset, profileIndexOffset, i)
-            profile.buckets[(profileHeader.relativeIndexOffset * chart.hourVolumeProfilePool.bucketSize / i32(bucketSize)) - profileIndexOffset + i32(i)].buyVolume += bucket.buyVolume
-            profile.buckets[(profileHeader.relativeIndexOffset * chart.hourVolumeProfilePool.bucketSize / i32(bucketSize)) - profileIndexOffset + i32(i)].sellVolume += bucket.sellVolume
+            profile.buckets[((profileHeader.relativeIndexOffset + i32(i)) * chart.hourVolumeProfilePool.bucketSize / i32(bucketSize)) - profileIndexOffset].buyVolume += bucket.buyVolume
+            profile.buckets[((profileHeader.relativeIndexOffset + i32(i)) * chart.hourVolumeProfilePool.bucketSize / i32(bucketSize)) - profileIndexOffset].sellVolume += bucket.sellVolume
         }
     }
 

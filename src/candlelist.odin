@@ -58,17 +58,6 @@ CandleList_TimestampToIndex :: proc(candleList : CandleList, timestamp : i32) ->
 		
 		index += remainingIndex - remainingOffsetIndex
 
-		if index < 0
-		{
-			fmt.println("TimestampToIndex Out of bounds < 0")
-			//index = 0
-		}
-		else if index > lastCandleIndex
-		{
-			fmt.println("TimestampToIndex Out of bounds >= len")
-			//index = lastCandleIndex		
-		}
-		
 		return index
 	}
 	
@@ -77,17 +66,6 @@ CandleList_TimestampToIndex :: proc(candleList : CandleList, timestamp : i32) ->
 
 	index := (timestamp - candleList.offset) / increment
 	
-	if index < 0
-	{
-		fmt.println("TimestampToIndex Out of bounds < 0")
-		//index = 0
-	}
-	else if index > lastCandleIndex
-	{
-		fmt.println("TimestampToIndex Out of bounds >= len")
-		//index = lastCandleIndex		
-	}
-
 	return index
 }
 

@@ -301,7 +301,7 @@ main :: proc()
 				highCandle, _ := Candle_HighestHigh(chart.candles[rulerZoomIndex].candles[startIndex:endIndex])
 				lowCandle, _ := Candle_LowestLow(chart.candles[rulerZoomIndex].candles[startIndex:endIndex])
 
-				rulerProfile = VolumeProfile_Create(rulerStartTimestamp, rulerEndTimestamp, highCandle.high, lowCandle.low, rulerZoomIndex, chart)
+				rulerProfile = VolumeProfile_Create(rulerStartTimestamp, rulerEndTimestamp, highCandle.high, lowCandle.low, rulerZoomIndex, chart, 25)
 			}
 		}
 
@@ -409,17 +409,11 @@ main :: proc()
 			// We add one pixel to the cursor's position, as all of the candles' timestamps get rounded down when converted
 			// As we are doing the opposite conversion, the mouse will always be less than or equal to the candles
 			timestamp : i32 = Timestamp_FromPixelX(GetMouseX() + cameraPosX + 1, scaleData)
-
-			if CandleList_IndexToTimestamp(chart.candles[zoomIndex], i32(len(visibleCandles)) + visibleCandlesStartIndex - 1) < timestamp
-			{
-				cursorCandleIndex = i32(len(visibleCandles)) - 1 + visibleCandlesStartIndex
-				cursorCandle = chart.candles[zoomIndex].candles[cursorCandleIndex]
-			}
-			else
-			{
-				cursorCandleIndex = CandleList_TimestampToIndex(chart.candles[zoomIndex], timestamp)
-				cursorCandle = chart.candles[zoomIndex].candles[cursorCandleIndex]
-			}
+			
+			cursorCandleIndex = CandleList_TimestampToIndex(chart.candles[zoomIndex], timestamp)
+			cursorCandleIndex = math.min(cursorCandleIndex, i32(len(visibleCandles)) - 1 + visibleCandlesStartIndex)
+			cursorCandleIndex = math.max(cursorCandleIndex, 0)
+			cursorCandle = chart.candles[zoomIndex].candles[cursorCandleIndex]
 		}
 
 		if IsKeyPressed(.L)
