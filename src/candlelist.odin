@@ -35,10 +35,10 @@ CandleList_TimestampToIndex :: proc(candleList : CandleList, timestamp : i32) ->
 	if candleList.timeframe == .MONTH
 	{
 		monthlyIncrements := MONTHLY_INCREMENTS
-		
+
 		offsetIndex := candleList.offset / FOUR_YEARS * 48
 		remainingOffsetTimestamp := candleList.offset % FOUR_YEARS
-		
+
 		remainingOffsetIndex : i32 = 47
 
 		for remainingOffsetTimestamp < monthlyIncrements[remainingOffsetIndex]
@@ -50,22 +50,22 @@ CandleList_TimestampToIndex :: proc(candleList : CandleList, timestamp : i32) ->
 		remainingTimestamp := timestamp % FOUR_YEARS
 
 		remainingIndex : i32 = 47
-		
+
 		for remainingTimestamp < monthlyIncrements[remainingIndex]
 		{
 			remainingIndex -= 1
 		}
-		
+
 		index += remainingIndex - remainingOffsetIndex
 
 		return index
 	}
-	
+
 	// Everything below months is uniform, and can be mathed
 	increment := timeframeIncrements[candleList.timeframe]
 
 	index := (timestamp - candleList.offset) / increment
-	
+
 	return index
 }
 
@@ -74,12 +74,12 @@ CandleList_IndexToTimestamp :: proc(candleList : CandleList, index : i32) -> i32
 	if candleList.timeframe == .MONTH
 	{
 		monthlyIncrements := MONTHLY_INCREMENTS
-		
+
 		offsetIndex := candleList.offset / FOUR_YEARS
 		offsetRemainderTimestamp := candleList.offset % FOUR_YEARS
 
 		offsetRemainderIndex : i32 = 47
-		
+
 		for offsetRemainderTimestamp < monthlyIncrements[offsetRemainderIndex]
 		{
 			offsetRemainderIndex -= 1
@@ -87,12 +87,12 @@ CandleList_IndexToTimestamp :: proc(candleList : CandleList, index : i32) -> i32
 
 		baseIndex := (offsetRemainderIndex + index) / 48
 		remainderIndex := (offsetRemainderIndex + index) % 48
-		
+
 		return candleList.offset + baseIndex * FOUR_YEARS + monthlyIncrements[remainderIndex] - monthlyIncrements[offsetRemainderIndex]
 	}
 
 	timeframeIncrements := CANDLE_TIMEFRAME_INCREMENTS
-	
+
 	return timeframeIncrements[candleList.timeframe] * index + candleList.offset
 }
 
@@ -107,24 +107,24 @@ CandleList_IndexToDuration :: proc(candleList : CandleList, index : i32) -> i32
 	if candleList.timeframe == .MONTH
 	{
 		monthlyIncrements := MONTHLY_INCREMENTS
-		
+
 		offsetRemainderTimestamp := candleList.offset % FOUR_YEARS
 		offsetRemainderIndex : i32 = 47
-		
+
 		for offsetRemainderTimestamp < monthlyIncrements[offsetRemainderIndex]
 		{
 			offsetRemainderIndex -= 1
 		}
 
 		remainderIndex := (offsetRemainderIndex + index) % 48
-		
+
 		daysPerMonth := DAYS_PER_MONTH
-		
+
 		return i32(daysPerMonth[remainderIndex]) * DAY
 	}
 
 	timeframeIncrements := CANDLE_TIMEFRAME_INCREMENTS
-	
+
 	return timeframeIncrements[candleList.timeframe]
 }
 
@@ -141,7 +141,7 @@ CandleList_CandlesBetweenTimestamps :: proc(candleList : CandleList, startTimest
 		// End is further left than the leftmost candle
 		return nil, 0
 	}
-	
+
     startTimestamp := startTimestamp - candleList.offset
     endTimestamp := endTimestamp - candleList.offset
 
@@ -150,26 +150,26 @@ CandleList_CandlesBetweenTimestamps :: proc(candleList : CandleList, startTimest
     candleListLen := i32(len(candleList.candles))
 
 	lastCandleIndex := candleListLen - 1
-	
+
 	if candleList.timeframe == .MONTH
 	{
 		monthlyIncrements := MONTHLY_INCREMENTS
-		
+
 		if startTimestamp < 0
 		{
 			startTimestamp = 0
 		}
-		
+
 		cameraCandleIndex := startTimestamp / FOUR_YEARS * 48
 		remainingCameraTimestamp := startTimestamp % FOUR_YEARS
-		
+
 		remainingIndex : i32 = 47
-		
+
 		for remainingCameraTimestamp < monthlyIncrements[remainingIndex]
 		{
 			remainingIndex -= 1
 		}
-		
+
 		cameraCandleIndex += remainingIndex
 
 		if candleListLen <= cameraCandleIndex
@@ -180,14 +180,14 @@ CandleList_CandlesBetweenTimestamps :: proc(candleList : CandleList, startTimest
 
 		cameraEndCandleIndex := endTimestamp / FOUR_YEARS * 48
 		remainingCameraEndTimestamp := endTimestamp % FOUR_YEARS
-		
+
 		remainingIndex = 47
 
 		for remainingCameraEndTimestamp < monthlyIncrements[remainingIndex]
 		{
 			remainingIndex -= 1
 		}
-		
+
 		cameraEndCandleIndex += remainingIndex
 
 		if cameraCandleIndex < 0
@@ -198,7 +198,7 @@ CandleList_CandlesBetweenTimestamps :: proc(candleList : CandleList, startTimest
 		{
 			cameraCandleIndex = lastCandleIndex
 		}
-		
+
 		if cameraEndCandleIndex < 0
 		{
 			cameraEndCandleIndex = 0
@@ -210,7 +210,7 @@ CandleList_CandlesBetweenTimestamps :: proc(candleList : CandleList, startTimest
 
 		return candleList.candles[cameraCandleIndex:cameraEndCandleIndex], cameraCandleIndex
 	}
-	
+
 	// Everything below months is uniform, and can be mathed
 	increment := timeframeIncrements[candleList.timeframe]
 
@@ -222,7 +222,7 @@ CandleList_CandlesBetweenTimestamps :: proc(candleList : CandleList, startTimest
 
 	startIndex := startTimestamp / increment
 	endIndex := endTimestamp / increment + 1
-	
+
 	if startIndex < 0
 	{
 		startIndex = 0
@@ -241,6 +241,6 @@ CandleList_CandlesBetweenTimestamps :: proc(candleList : CandleList, startTimest
 		// +1 because slices exclude the max index
 		endIndex = lastCandleIndex + 1
 	}
-	
+
 	return candleList.candles[startIndex:endIndex], startIndex
 }

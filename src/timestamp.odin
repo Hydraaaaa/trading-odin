@@ -58,7 +58,7 @@ Timestamp_ToDayMonthYear :: proc(timestamp : i32) -> DayMonthYear
 
         if date.year % 4 == 0
         {
-            yearLength = 31_622_400 
+            yearLength = 31_622_400
         }
 
         if timestamp < yearLength

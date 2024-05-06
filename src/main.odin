@@ -25,16 +25,16 @@ FONT_SIZE :: 14
 main :: proc()
 {
 	using raylib
-	
+
 	profilerData : ProfilerData
 
 	SetConfigFlags({.WINDOW_RESIZABLE})
-	
+
 	SetTraceLogLevel(TraceLogLevel.WARNING)
 
 	InitWindow(INITIAL_SCREEN_WIDTH, INITIAL_SCREEN_HEIGHT, "Trading")
 	defer CloseWindow()
-	
+
 	icon := LoadImage("icon.png")
 	defer UnloadImage(icon)
 
@@ -49,9 +49,9 @@ main :: proc()
     SetTargetFPS(60)
 
 	font := LoadFontEx("roboto-bold.ttf", FONT_SIZE, nil, 0)
-	
+
 	chart : Chart
-	
+
 	chart.dateToDownload = LoadDateToDownload()
 
 	chart.candles[Timeframe.MINUTE].candles = LoadMinuteCandles()
@@ -69,11 +69,11 @@ main :: proc()
 		}
 
 		monthlyIncrements := MONTHLY_INCREMENTS
-		
+
 		fourYearTimestamp := chart.candles[prevTimeframe].offset % FOUR_YEARS
 
 		fourYearIndex := 47
-		
+
 		for fourYearTimestamp < monthlyIncrements[fourYearIndex]
 		{
 			fourYearIndex -= 1
@@ -84,16 +84,16 @@ main :: proc()
 	}
 
 	defer delete(chart.candles[Timeframe.MINUTE].candles)
-	
+
 	// Time is UTC, which matches Bybit's historical data upload time
 	currentDate := Timestamp_ToDayMonthYear(i32(time.now()._nsec / i64(time.Second)) - TIMESTAMP_2010)
-	
+
 	downloadThread : ^thread.Thread
 	downloadedTrades : []Trade
 	downloading := false
-	
+
 	chart.hourVolumeProfilePool = LoadHourVolumeProfiles()
-	
+
 	if chart.dateToDownload != currentDate
 	{
 		downloadThread = thread.create_and_start_with_poly_data2(&chart.dateToDownload, &downloadedTrades, DownloadDay)
@@ -132,7 +132,7 @@ main :: proc()
 	draggingRuler := false
 	rightDragging := false
 	rightDraggingPriceStart : f32
-	
+
 	dragStartCandleIndex : i32
 	dragStartZoomIndex : Timeframe
 
@@ -193,7 +193,7 @@ main :: proc()
 	}
 
 	scaleData.verticalScale = initialVerticalScale
-	
+
 
 	// UPDATE <><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
 	for !WindowShouldClose()
@@ -264,7 +264,7 @@ main :: proc()
 			cameraPosX -= i32(GetMouseDelta().x)
 			cameraPosY -= i32(GetMouseDelta().y)
 		}
-		
+
 		if draggingRuler
 		{
 			if CandleList_IndexToTimestamp(chart.candles[dragStartZoomIndex], dragStartCandleIndex) > CandleList_IndexToTimestamp(chart.candles[zoomIndex], cursorCandleIndex)
@@ -284,9 +284,9 @@ main :: proc()
 				{
 					VolumeProfile_Destroy(rulerProfile)
 				}
-				
+
 				rulerZoomIndex : Timeframe
-				
+
 				if dragStartZoomIndex > zoomIndex
 				{
 					rulerZoomIndex = zoomIndex
@@ -354,7 +354,7 @@ main :: proc()
 			}
 
 			zoomIndex = Timeframe(TIMEFRAME_COUNT - 1)
-			
+
 			for int(zoomIndex) > 0 &&
 			    CandleList_IndexToWidth(chart.candles[zoomIndex - Timeframe(1)], 0, scaleData) > ZOOM_THRESHOLD
 			{
@@ -365,14 +365,14 @@ main :: proc()
 			cameraPosX = i32(cameraCenterX / scaleData.horizontalZoom - f64(screenWidth) / 2)
 			cameraPosY = i32(cameraCenterY / scaleData.verticalZoom - f64(screenHeight) / 2)
 		}
-		
+
 		// Check download thread
 		if downloading
 		{
 			if thread.is_done(downloadThread)
 			{
 				thread.destroy(downloadThread)
-				
+
 				// 404 Not Found
 				if downloadedTrades == nil
 				{
@@ -409,7 +409,7 @@ main :: proc()
 			// We add one pixel to the cursor's position, as all of the candles' timestamps get rounded down when converted
 			// As we are doing the opposite conversion, the mouse will always be less than or equal to the candles
 			timestamp : i32 = Timestamp_FromPixelX(GetMouseX() + cameraPosX + 1, scaleData)
-			
+
 			cursorCandleIndex = CandleList_TimestampToIndex(chart.candles[zoomIndex], timestamp)
 			cursorCandleIndex = math.min(cursorCandleIndex, i32(len(visibleCandles)) - 1 + visibleCandlesStartIndex)
 			cursorCandleIndex = math.max(cursorCandleIndex, 0)
@@ -437,7 +437,7 @@ main :: proc()
 					priceLower = candle.low
 				}
 			}
-			
+
 			if priceUpper > cameraTop
 			{
 				priceUpper = cameraTop
@@ -447,7 +447,7 @@ main :: proc()
 			{
 				priceLower = cameraBottom
 			}
-			
+
 			prePixelUpper : f32 = Price_ToPixelY_f32(priceUpper, scaleData)
 			prePixelLower : f32 = Price_ToPixelY_f32(priceLower, scaleData)
 
@@ -459,19 +459,19 @@ main :: proc()
 			postPixelLower : f32 = Price_ToPixelY_f32(priceLower, scaleData)
 
 			difference : f64 = f64(postPixelLower - postPixelUpper) / f64(prePixelLower - prePixelUpper)
-			
+
 			initialVerticalScale *= difference
 			scaleData.verticalScale *= difference
-			
+
 			cameraPosY = Price_ToPixelY(priceUpper, scaleData) - pixelOffset
 		}
 
 		// Rendering <><><><><><><><><><><><><><><><><><><><><><><><><><><><>
-		
+
         BeginDrawing()
 
 		ClearBackground(BLACK)
-		
+
 		// Used for label bars
 		MIN_ALPHA :: 10
 		MAX_ALPHA :: 19
@@ -487,7 +487,7 @@ main :: proc()
 			width : i32,
 			color : Color,
 		}
-		
+
 		// These are the only four linear scale increments, once these are exhausted, the values are multiplied by 10 and recycled
 		priceLabels : [dynamic]PriceLabel
 		reserve(&priceLabels, 32)
@@ -504,14 +504,14 @@ main :: proc()
 
 			topLabelPrice := Price_FromPixelY(cameraPosY - labelHeight / 2, scaleData)
 			priceDifference := Price_FromPixelY(cameraPosY - labelHeight / 2 - priceLabelSpacing, scaleData) - topLabelPrice
-			
+
 			currentMagnitude : f32 = 1_000_000_000
-			
+
 			if priceDifference > 1_000_000_000
 			{
 				priceDifference = 1_000_000_000
 			}
-			
+
 			for currentMagnitude > priceDifference
 			{
 				currentMagnitude *= 0.1
@@ -530,20 +530,20 @@ main :: proc()
 
 			append(&priceLabels, PriceLabel{})
 			label := &priceLabels[len(priceLabels) - 1]
-			
+
 			label.price = topLabelPrice
 			fmt.bprintf(label.textBuffer[:], "%.2f\x00", label.price)
 			label.width = i32(MeasureTextEx(font, cstring(&label.textBuffer[0]), FONT_SIZE, 0).x) + HORIZONTAL_LABEL_PADDING * 2
 			label.color = Color{255, 255, 255, MAX_ALPHA}
-			
+
 			prevPrice := topLabelPrice
 			prevPixel := Price_ToPixelY(prevPrice, scaleData)
-			
+
 			for prevPixel < cameraPosY + screenHeight
 			{
 				currentPrice := Price_FromPixelY(prevPixel + priceLabelSpacing, scaleData)
 				priceDifference = prevPrice - currentPrice
-				
+
 				// Price_FromPixelY can sometimes return +inf, which crashes the program without this break
 				if currentPrice > 1_000_000_000
 				{
@@ -554,9 +554,9 @@ main :: proc()
 				{
 					currentMagnitude *= 0.1
 				}
-				
+
 				normalizedDifference = priceDifference / currentMagnitude
-				
+
 				for i in 1 ..< len(priceIncrements)
 				{
 					if normalizedDifference < priceIncrements[i]
@@ -568,12 +568,12 @@ main :: proc()
 
 				append(&priceLabels, PriceLabel{})
 				label := &priceLabels[len(priceLabels) - 1]
-				
+
 				label.price = currentPrice
 				fmt.bprintf(label.textBuffer[:], "%.2f\x00", label.price)
 				label.width = i32(MeasureTextEx(font, cstring(&label.textBuffer[0]), FONT_SIZE, 0).x) + HORIZONTAL_LABEL_PADDING * 2
 				label.color = Color{255, 255, 255, MAX_ALPHA}
-				
+
 				prevPixel = Price_ToPixelY(currentPrice, scaleData)
 				prevPrice = currentPrice
 			}
@@ -581,50 +581,50 @@ main :: proc()
 		else
 		{
 			priceIncrements : [4]f32 = {1, 2, 2.5, 5}
-		
+
 			// Linear scaling
 			// Do everything multiplied by the minimum decimal so that the minimum value is 1
 			// This way everything can be done in integers and we can avoid precision errors
-			
+
 			priceLabelSpacing = i32(f32(priceLabelSpacing) / MINIMUM_DECIMAL)
 
 			pixelPriceIncrement : f32 = abs(Price_ToPixelY_f32(1, scaleData) - Price_ToPixelY_f32(0, scaleData))
-			
+
 			// Will need to reference a minimum size value in the scenario of memecoins or alt pairs with BTC
 			priceIncrementMultiplier : i32 = 1
 			priceIncrementIndex := 0
-			
+
 			// Can we math this out?
 			for i32(pixelPriceIncrement * f32(priceIncrementMultiplier) * slice.last(priceIncrements[:])) < priceLabelSpacing
 			{
-				priceIncrementMultiplier *= 10				
+				priceIncrementMultiplier *= 10
 			}
 
 			for i32(pixelPriceIncrement * f32(priceIncrementMultiplier) * priceIncrements[priceIncrementIndex]) < priceLabelSpacing
 			{
 				priceIncrementIndex += 1
 			}
-			
+
 			priceIncrement := i32(f32(priceIncrementMultiplier) * priceIncrements[priceIncrementIndex])
-			
+
 			screenTopPrice := i32(Price_FromPixelY(cameraPosY, scaleData) / MINIMUM_DECIMAL)
 			screenBottomPrice := i32(Price_FromPixelY(cameraPosY + screenHeight, scaleData) / MINIMUM_DECIMAL)
-			
+
 			// Round to the nearest increment (which lies above the screen border)
 			currentPrice := screenTopPrice + priceIncrement - screenTopPrice % priceIncrement
 			lastPrice := i32(screenBottomPrice - priceIncrement)
-			
+
 			for currentPrice > lastPrice
 			{
 				append(&priceLabels, PriceLabel{})
 				label := &priceLabels[len(priceLabels) - 1]
-				
+
 				label.price = f32(currentPrice) / 100
 				fmt.bprintf(label.textBuffer[:], "%.2f\x00", label.price)
 				label.width = i32(MeasureTextEx(font, cstring(&label.textBuffer[0]), FONT_SIZE, 0).x) + HORIZONTAL_LABEL_PADDING * 2
-				
+
 				significantIncrementTest := label.price / (f32(priceIncrementMultiplier) / 10)
-				
+
 				if significantIncrementTest == f32(i32(significantIncrementTest))
 				{
 					label.color = Color{255, 255, 255, MAX_ALPHA}
@@ -633,7 +633,7 @@ main :: proc()
 				{
 					label.color = Color{255, 255, 255, MIN_ALPHA}
 				}
-				
+
 				currentPrice -= priceIncrement
 			}
 		}
@@ -652,20 +652,20 @@ main :: proc()
 		timeRange := cameraEndTimestamp - cameraTimestamp
 
 		pixelTimestampIncrement := Timestamp_FromPixelX(1, scaleData)
-		
+
 		TimestampLabel :: struct
 		{
 			timestamp : i32,
 			textBuffer : [8]u8,
 			color : Color,
 		}
-		
+
 		timestampLabels : [dynamic]TimestampLabel
 		reserve(&timestampLabels, 32)
-		
+
 		DAY_TIMESTAMP :: 2880
 		DAY31_TIMESTAMP :: 75_000
-		
+
 		switch pixelTimestampIncrement
 		{
 			case 0 ..< DAY_TIMESTAMP: // Times + Days
@@ -697,34 +697,34 @@ main :: proc()
 					86_400, \
 					86_400 \
 				} // Extra 86_400 to conveniently handle [index + 1] query
-				
+
 				incrementIndex : int = INCREMENT_COUNT - 1
-				
+
 				for pixelTimestampIncrement < incrementRequirements[incrementIndex]
 				{
 					incrementIndex -= 1
 				}
-				
+
 				// Round the current timestamp
 				// As these are ints, the decimal value will be lost in the division, leading to a perfect increment
 				currentTimestamp := (cameraTimestamp / increments[incrementIndex]) * increments[incrementIndex]
 
 				prevTimestamp : i32 = 0
-		
+
 				for prevTimestamp < cameraEndTimestamp
 				{
 					append(&timestampLabels, TimestampLabel{})
-					
+
 					label := &timestampLabels[len(timestampLabels) - 1]
-					
+
 					label.color = WHITE
-					
+
 					currentDate := Timestamp_ToDayMonthYear(currentTimestamp)
-					
+
 					label.timestamp = currentTimestamp
-					
+
 					dayTimestamp := currentTimestamp % DAY
-					
+
 					// Setting label contents
 					if dayTimestamp == 0 // Days
 					{
@@ -757,7 +757,7 @@ main :: proc()
 						minutes := dayTimestamp % 3600 / 60
 						fmt.bprintf(label.textBuffer[:], "%i:%2i", hours, minutes)
 					}
-					
+
 					// Fading out smaller increments
 					if incrementIndex == INCREMENT_COUNT - 1
 					{
@@ -780,7 +780,7 @@ main :: proc()
 							}
 							else
 							{
-								label.color.a = MAX_ALPHA							
+								label.color.a = MAX_ALPHA
 							}
 						}
 						else
@@ -798,15 +798,15 @@ main :: proc()
 			{
 				currentDate := Timestamp_ToDayMonthYear(cameraTimestamp)
 				currentDate.day = 1
-				
+
 				INCREMENT_COUNT :: 4
 
 				// Values for detemining how many months to increment for each label
 				incrementRequirements : [INCREMENT_COUNT]i32 = {0, DAY31_TIMESTAMP, DAY31_TIMESTAMP * 3, DAY31_TIMESTAMP * 6}
 				increments : [INCREMENT_COUNT + 1]int = {1, 3, 6, 12, 12} // Extra 12 to conveniently handle [index + 1] query
-				
+
 				incrementIndex : int = INCREMENT_COUNT - 1
-				
+
 				for pixelTimestampIncrement < incrementRequirements[incrementIndex]
 				{
 					incrementIndex -= 1
@@ -815,31 +815,31 @@ main :: proc()
 				// Get each month within the current increment steps, but make sure that the increments are offset from January
 				// This ensures year numbers are included
 				monthOffset := currentDate.month % increments[incrementIndex]
-				
+
 				if monthOffset == 0
 				{
 					monthOffset = increments[incrementIndex]
 				}
-				
+
 				currentDate.month += 1 - monthOffset
-				
+
 				for currentDate.month < 1
 				{
 					currentDate.year -= 1
 					currentDate.month += 12
 				}
-				
+
 				prevTimestamp : i32 = 0
 				currentTimestamp := DayMonthYear_ToTimestamp(currentDate)
-		
+
 				for prevTimestamp < cameraEndTimestamp
 				{
 					append(&timestampLabels, TimestampLabel{})
-					
+
 					label := &timestampLabels[len(timestampLabels) - 1]
-					
+
 					label.color = WHITE
-					
+
 					if currentDate.month % increments[incrementIndex + 1] != 1
 					{
 						if incrementRequirements[incrementIndex] != incrementRequirements[incrementIndex + 1]
@@ -848,16 +848,16 @@ main :: proc()
 						}
 						else
 						{
-							label.color.a = MAX_ALPHA							
+							label.color.a = MAX_ALPHA
 						}
 					}
 					else
 					{
 						label.color.a = MAX_ALPHA
 					}
-					
+
 					label.timestamp = currentTimestamp
-					
+
 					switch currentDate.month
 					{
 						case 2: fmt.bprintf(label.textBuffer[:], "Feb\x00")
@@ -876,20 +876,20 @@ main :: proc()
 
 					prevTimestamp = currentTimestamp
 					currentDate.month += increments[incrementIndex]
-					
+
 					if currentDate.month > 12
 					{
 						currentDate.year += 1
 						currentDate.month -= 12
 					}
-					
+
 					currentTimestamp = DayMonthYear_ToTimestamp(currentDate)
 				}
 			}
 		}
-		
+
 		// Draw Time Axis Lines
-		timeAxisLineHeight := screenHeight - labelHeight 
+		timeAxisLineHeight := screenHeight - labelHeight
 
 		for label in timestampLabels
 		{
@@ -959,7 +959,7 @@ main :: proc()
 				}
 			}
 		}
-		
+
 		if rulerProfile.bucketSize != 0
 		{
 			startPixel := Timestamp_ToPixelX(rulerStartTimestamp, scaleData)
@@ -1018,7 +1018,7 @@ main :: proc()
 			midLow : i32
 			midHighPrice : f32
 			midLowPrice : f32
-			
+
 			if cursorCandle.open > cursorCandle.close
 			{
 				midHigh = Price_ToPixelY(cursorCandle.open, scaleData) - cameraPosY
@@ -1035,16 +1035,16 @@ main :: proc()
 			}
 
 			highestSnap := high - SNAP_PIXELS
-			lowestSnap := low + SNAP_PIXELS			
-			
+			lowestSnap := low + SNAP_PIXELS
+
 			if mouseY >= highestSnap &&
-			   mouseY <= lowestSnap 
+			   mouseY <= lowestSnap
 			{
 				// Midpoints (in pixels)
 				highMidHigh := (high + midHigh) / 2
 				midHighMidLow := (midHigh + midLow) / 2
 				midLowLow := (midLow + low) / 2
-				
+
 				if mouseY < highMidHigh
 				{
 					mouseY = high
@@ -1065,7 +1065,7 @@ main :: proc()
 					mouseY = low
 					mouseSnapPrice = cursorCandle.low
 				}
-				
+
 				isSnapped = true
 			}
 		}
@@ -1078,7 +1078,7 @@ main :: proc()
 		{
 			DrawPixel(i, mouseY, crosshairColor)
 		}
-		
+
 		xPos : i32 = CandleList_IndexToPixelX(chart.candles[zoomIndex], cursorCandleIndex, scaleData) - cameraPosX
 		candleWidth : i32 = CandleList_IndexToWidth(chart.candles[zoomIndex], cursorCandleIndex, scaleData)
 
@@ -1086,12 +1086,12 @@ main :: proc()
 		{
 			DrawPixel(xPos + i32(f32(candleWidth) / 2 - 0.5), i, crosshairColor)
 		}
-		
+
 		// Draw current price line
 		lastCandle := slice.last(chart.candles[zoomIndex].candles[:])
 		priceY := Price_ToPixelY(lastCandle.close, scaleData) - cameraPosY
 		priceColor : Color
-		
+
 		if lastCandle.close < lastCandle.open
 		{
 			priceColor = RED
@@ -1127,7 +1127,7 @@ main :: proc()
 			{
 				labelPosX = 2
 			}
-			else if labelPosX > f32(screenWidth) - textRect.x - 2 
+			else if labelPosX > f32(screenWidth) - textRect.x - 2
 			{
 				labelPosX = f32(screenWidth) - textRect.x - 2
 			}
@@ -1149,7 +1149,7 @@ main :: proc()
 			{
 				labelPosX = 2
 			}
-			else if labelPosX > f32(screenWidth) - textRect.x - 2 
+			else if labelPosX > f32(screenWidth) - textRect.x - 2
 			{
 				labelPosX = f32(screenWidth) - textRect.x - 2
 			}
@@ -1173,7 +1173,7 @@ main :: proc()
 				DrawTextEx(font, cstring(&textBuffer[0]), {posX, posY}, FONT_SIZE, 0, WHITE)
 			}
 		}
-		
+
 		// Hovered price label
 		labelBackground := BLACK
 		labelBackground.a = 127
@@ -1181,12 +1181,12 @@ main :: proc()
 		if isSnapped
 		{
 			fmt.bprintf(textBuffer[:], "%.2f\x00", mouseSnapPrice)
-			
+
 			width := MeasureTextEx(font, cstring(&textBuffer[0]), FONT_SIZE, 0).x + HORIZONTAL_LABEL_PADDING * 2
 
 			posX := f32(CandleList_IndexToPixelX(chart.candles[zoomIndex], cursorCandleIndex + 1, scaleData) - cameraPosX)
 			posY := f32(Price_ToPixelY(mouseSnapPrice, scaleData) - cameraPosY) - f32(labelHeight) / 2
-			
+
 			if i32(posX + width * 2 - HORIZONTAL_LABEL_PADDING) > screenWidth
 			{
 				posX -= width + f32(CandleList_IndexToWidth(chart.candles[zoomIndex], cursorCandleIndex, scaleData))
@@ -1208,14 +1208,14 @@ main :: proc()
 		for i in 0 ..< len(priceLabels)
 		{
 			pixelY := Price_ToPixelY(priceLabels[i].price, scaleData) - cameraPosY
-			
+
 			labelPosX = f32(screenWidth) - f32(priceLabels[i].width)
 			labelPosY = f32(pixelY) - f32(labelHeight) / 2
-			
+
 			DrawRectangleRounded({labelPosX, labelPosY, f32(priceLabels[i].width), f32(labelHeight)}, 0.5, 10, labelBackground)
 			DrawTextEx(font, cstring(&priceLabels[i].textBuffer[0]), {labelPosX + HORIZONTAL_LABEL_PADDING, labelPosY + VERTICAL_LABEL_PADDING}, FONT_SIZE, 0, WHITE)
 		}
-		
+
 		// Draw current price label
 		{
 			fmt.bprintf(textBuffer[:], "%.2f\x00", lastCandle.close)
@@ -1227,23 +1227,23 @@ main :: proc()
 			DrawRectangleRounded({labelPosX, labelPosY, labelWidth, f32(labelHeight)}, 0.5, 10, priceColor)
 			DrawTextEx(font, cstring(&textBuffer[0]), {labelPosX + HORIZONTAL_LABEL_PADDING, labelPosY + VERTICAL_LABEL_PADDING}, FONT_SIZE, 0, WHITE)
 		}
-		
+
 		// Draw Timestamp Labels
 		for i in 0 ..< len(timestampLabels)
 		{
 			pixelX := Timestamp_ToPixelX(timestampLabels[i].timestamp, scaleData) - cameraPosX
-			
+
 			labelWidth := MeasureTextEx(font, cstring(&timestampLabels[i].textBuffer[0]), FONT_SIZE, 0).x + HORIZONTAL_LABEL_PADDING * 2
 			labelPosX = f32(pixelX) - labelWidth / 2
 			labelPosY = f32(screenHeight) - f32(labelHeight)
-			
+
 			labelColor := timestampLabels[i].color
 			labelColor.a = 255
-			
+
 			DrawRectangleRounded({labelPosX, labelPosY, labelWidth, f32(labelHeight)}, 0.5, 10, labelBackground)
 			DrawTextEx(font, cstring(&timestampLabels[i].textBuffer[0]), {labelPosX + HORIZONTAL_LABEL_PADDING, labelPosY + VERTICAL_LABEL_PADDING}, FONT_SIZE, 0, labelColor)
 		}
-		
+
 		// Draw Cursor Timestamp Label
 		{
 			cursorTimestamp := CandleList_IndexToTimestamp(chart.candles[zoomIndex], cursorCandleIndex)
@@ -1254,14 +1254,14 @@ main :: proc()
 			cursorDate := Timestamp_ToDayMonthYear(cursorTimestamp)
 
 			bufferIndex := 0
-			
+
 			if zoomIndex < .DAY
 			{
 				dayTimestamp := cursorTimestamp % DAY
 				hours   := dayTimestamp / 3600
 				minutes := dayTimestamp % 3600 / 60
 				fmt.bprintf(cursorLabelBuffer[:], "%i:%2i ", hours, minutes)
-				
+
 				if hours >= 10
 				{
 					bufferIndex += 6
@@ -1271,7 +1271,7 @@ main :: proc()
 					bufferIndex += 5
 				}
 			}
-			
+
 			switch cursorDayOfWeek
 			{
 				case .MONDAY: fmt.bprint(cursorLabelBuffer[bufferIndex:bufferIndex + 4], "Mon ")
@@ -1282,18 +1282,18 @@ main :: proc()
 				case .SATURDAY: fmt.bprint(cursorLabelBuffer[bufferIndex:bufferIndex + 4], "Sat ")
 				case .SUNDAY: fmt.bprint(cursorLabelBuffer[bufferIndex:bufferIndex + 4], "Sun ")
 			}
-			
+
 			bufferIndex += 4
 
 			fmt.bprintf(cursorLabelBuffer[bufferIndex:bufferIndex + 3], "%i ", cursorDate.day)
-			
+
 			if cursorDate.day >= 10
 			{
 				bufferIndex += 3
 			}
 			else
 			{
-				bufferIndex += 2				
+				bufferIndex += 2
 			}
 
 			// Setting label contents
@@ -1312,11 +1312,11 @@ main :: proc()
 				case 11: fmt.bprint(cursorLabelBuffer[bufferIndex:bufferIndex + 4], "Nov ")
 				case 12: fmt.bprint(cursorLabelBuffer[bufferIndex:bufferIndex + 4], "Dec ")
 			}
-			
+
 			bufferIndex += 4
-			
+
 			fmt.bprintf(cursorLabelBuffer[bufferIndex:], "%i\x00", cursorDate.year % 100)
-			
+
 			bufferIndex += 3
 
 			pixelX := Timestamp_ToPixelX(cursorTimestamp, scaleData) - cameraPosX
@@ -1328,11 +1328,11 @@ main :: proc()
 			DrawRectangleRounded({labelPosX, labelPosY, labelWidth, f32(labelHeight)}, 0.5, 10, Color{54, 58, 69, 255})
 			DrawTextEx(font, cstring(&cursorLabelBuffer[0]), {labelPosX + HORIZONTAL_LABEL_PADDING, labelPosY + VERTICAL_LABEL_PADDING}, FONT_SIZE, 0, WHITE)
 		}
-		
+
 		clear(&timestampLabels)
 
         EndDrawing()
 	}
-	
+
 	Profiler_PrintData(profilerData)
 }

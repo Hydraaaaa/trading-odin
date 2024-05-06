@@ -62,11 +62,11 @@ Candle_FloorTimestamp :: proc(timestamp : i32, timeframe : Timeframe) -> i32
 	if timeframe == .MONTH
 	{
 		monthlyIncrements := MONTHLY_INCREMENTS
-		
+
 		remainingTimestamp := timestamp % monthlyIncrements[47]
 
 		remainingIndex := 47
-		
+
 		for remainingTimestamp < monthlyIncrements[remainingIndex]
 		{
 			remainingIndex -= 1
@@ -74,13 +74,13 @@ Candle_FloorTimestamp :: proc(timestamp : i32, timeframe : Timeframe) -> i32
 
 		return timestamp - remainingTimestamp + monthlyIncrements[remainingIndex]
 	}
-	
+
 	// Timestamp 0 (1/1/2010) is a Friday, offset the timestamps to produce increments on Mondays
 	if timeframe == .WEEK
 	{
 		return timestamp - (timestamp + DAY * 4) % timeframeIncrements[timeframe]
 	}
-	
+
 	// Everything below months is uniform, and can be mathed
 	return timestamp - timestamp % timeframeIncrements[timeframe]
 }
@@ -88,7 +88,7 @@ Candle_FloorTimestamp :: proc(timestamp : i32, timeframe : Timeframe) -> i32
 Candle_Merge :: proc(candles : ..Candle) -> Candle
 {
 	newCandle := candles[0]
-	
+
 	for candle in candles[1:]
 	{
 		newCandle.volume += candle.volume
@@ -103,8 +103,8 @@ Candle_Merge :: proc(candles : ..Candle) -> Candle
 			newCandle.low = candle.low
 		}
 	}
-	
+
 	newCandle.close = candles[len(candles) - 1].close
-	
+
 	return newCandle
 }

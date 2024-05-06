@@ -13,13 +13,13 @@ BYBIT_ORIGIN_DATE :: DayMonthYear{25, 3, 2020}
 BYBIT_ORIGIN_MINUTE_TIMESTAMP :: 1_585_132_560 - TIMESTAMP_2010
 BYBIT_ORIGIN_HOUR_OF_DAY :: 10
 
-// Allocates to trades slice, will be nil if download fails  
+// Allocates to trades slice, will be nil if download fails
 DownloadDay :: proc(date : ^DayMonthYear, trades : ^[]Trade)
 {
 	trades^ = nil
 
 	pathBuffer : [len("https://public.bybit.com/trading/BTCUSDT/BTCUSDTYYYY-MM-DD.csv.gz")]u8
-	
+
 	apiResponse, apiError := client.get(fmt.bprintf(pathBuffer[:], "https://public.bybit.com/trading/BTCUSDT/BTCUSDT%i-%2i-%2i.csv.gz", date.year, date.month, date.day))
 
 	fmt.printfln("Downloading %2i/%2i/%i", date.day, date.month, date.year)
@@ -32,13 +32,13 @@ DownloadDay :: proc(date : ^DayMonthYear, trades : ^[]Trade)
 	defer client.response_destroy(&apiResponse)
 
 	responseBody, responseBodyWasAllocated, responseBodyError := client.response_body(&apiResponse)
-	
+
 	if responseBodyError != nil
 	{
 		fmt.println("DownloadDay error retrieving response body:", responseBodyError)
 		return
 	}
-	
+
 	// 404 Not Found
 	if responseBody.(client.Body_Plain)[0] == '<'
 	{
@@ -60,7 +60,7 @@ DownloadDay :: proc(date : ^DayMonthYear, trades : ^[]Trade)
 	HEADER :: "timestamp,symbol,side,size,price,tickDirection,trdMatchID,grossValue,homeNotional,foreignNotional\n"
 
 	downloadedDataPos := len(HEADER)
-	
+
 	downloadedTrades : [dynamic]Trade
 	reserve(&downloadedTrades, 524288)
 
@@ -93,18 +93,18 @@ DownloadDay :: proc(date : ^DayMonthYear, trades : ^[]Trade)
 		commaIndex = strings.index_byte(downloadedData[downloadedDataPos:], ',')
 		trade.volume, ok = strconv.parse_f32(downloadedData[downloadedDataPos:downloadedDataPos + commaIndex])
 		downloadedDataPos += commaIndex + 1
-		
+
 		// Price
 		commaIndex = strings.index_byte(downloadedData[downloadedDataPos:], ',')
 		trade.price, ok = strconv.parse_f32(downloadedData[downloadedDataPos:downloadedDataPos + commaIndex])
 		downloadedDataPos += commaIndex + 1
 
 		append(&downloadedTrades, trade)
-		
+
 		// Each row won't be any shorter than another 63 chars long, so can save time by skipping 63 chars forward
 		downloadedDataPos += strings.index_byte(downloadedData[downloadedDataPos + 63:], '\n') + 64
 	}
-	
+
 	// Direction of data within Bybit daily trades files isn't consistent all the way through
 	// In the first day (25, 3, 2020), trades are in inverse chronological order
 	// More recent days are in chronological order

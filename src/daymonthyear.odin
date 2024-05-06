@@ -48,7 +48,7 @@ DayMonthYear_AddDays :: proc(date : DayMonthYear, days : int) -> DayMonthYear
 {
     // 0 at the start to make this 1 indexed, and match incoming values
     months : [13]int = {0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}
-    
+
     // Lengthen February for leap year
     months[2] = 28 + int(date.year % 4 == 0)
 
@@ -63,7 +63,7 @@ DayMonthYear_AddDays :: proc(date : DayMonthYear, days : int) -> DayMonthYear
         {
             date.month = 1
             date.year += 1
-    
+
             // Lengthen February for leap year
             months[2] = 28 + int(date.year % 4 == 0)
         }

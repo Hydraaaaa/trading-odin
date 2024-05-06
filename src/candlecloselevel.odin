@@ -21,7 +21,7 @@ CandleCloseLevels :: struct
 //CreateCloseLevels :: proc(candles : []Candle, color : raylib.Color) -> CandleCloseLevels
 //{
 //	closeLevels : CandleCloseLevels
-//	
+//
 //	closeLevels.color = color
 //
 //	// Could this upper limit be reduced?
