@@ -964,8 +964,7 @@ main :: proc()
 		{
 			startPixel := Timestamp_ToPixelX(rulerStartTimestamp, scaleData)
 			width := Timestamp_ToPixelX(rulerEndTimestamp, scaleData) - startPixel
-			DrawVolumeProfile(startPixel - cameraPosX, width, cameraPosY, rulerProfile, scaleData, true, false, false, false, false)
-			DrawVolumeProfile(startPixel - cameraPosX + width, width, cameraPosY, rulerProfile, scaleData, false, true, true, true, true)
+			DrawVolumeProfile(startPixel - cameraPosX, width, cameraPosY, rulerProfile, scaleData, 100, true, false, false, false, false)
 		}
 
 		// Draw Candles
@@ -1070,6 +1069,14 @@ main :: proc()
 
 				isSnapped = true
 			}
+		}
+
+		if rulerProfile.bucketSize != 0
+		{
+			startPixel := Timestamp_ToPixelX(rulerStartTimestamp, scaleData)
+			width := Timestamp_ToPixelX(rulerEndTimestamp, scaleData) - startPixel
+			DrawVolumeProfile(startPixel - cameraPosX, width, cameraPosY, rulerProfile, scaleData, 63, true, false, false, false, false)
+			DrawVolumeProfile(startPixel - cameraPosX + width, width, cameraPosY, rulerProfile, scaleData, 191, false, true, true, true, true)
 		}
 
 		// Draw Crosshair
@@ -1186,12 +1193,29 @@ main :: proc()
 
 			width := MeasureTextEx(font, cstring(&textBuffer[0]), FONT_SIZE, 0).x + HORIZONTAL_LABEL_PADDING * 2
 
-			posX := f32(CandleList_IndexToPixelX(chart.candles[zoomIndex], cursorCandleIndex + 1, scaleData) - cameraPosX)
+			posX := f32(CandleList_IndexToPixelX(chart.candles[zoomIndex], cursorCandleIndex, scaleData) - cameraPosX) - width
 			posY := f32(Price_ToPixelY(mouseSnapPrice, scaleData) - cameraPosY) - f32(labelHeight) / 2
 
-			if i32(posX + width * 2 - HORIZONTAL_LABEL_PADDING) > screenWidth
+			if posX + HORIZONTAL_LABEL_PADDING < 0
 			{
-				posX -= width + f32(CandleList_IndexToWidth(chart.candles[zoomIndex], cursorCandleIndex, scaleData))
+				posX += width + f32(CandleList_IndexToWidth(chart.candles[zoomIndex], cursorCandleIndex, scaleData))
+			}
+
+			DrawRectangleRounded({posX, posY, width, f32(labelHeight)}, 0.5, 10, labelBackground)
+			DrawTextEx(font, cstring(&textBuffer[0]), {posX + HORIZONTAL_LABEL_PADDING, posY + VERTICAL_LABEL_PADDING}, FONT_SIZE, 0, WHITE)
+		}
+		else
+		{
+			fmt.bprintf(textBuffer[:], "%.2f\x00", Price_FromPixelY(GetMouseY() + cameraPosY, scaleData))
+
+			width := MeasureTextEx(font, cstring(&textBuffer[0]), FONT_SIZE, 0).x + HORIZONTAL_LABEL_PADDING * 2
+
+			posX := f32(GetMouseX()) - width
+			posY := f32(GetMouseY()) - f32(labelHeight) / 2
+
+			if posX + HORIZONTAL_LABEL_PADDING < 0
+			{
+				posX += width + f32(GetMouseX())
 			}
 
 			DrawRectangleRounded({posX, posY, width, f32(labelHeight)}, 0.5, 10, labelBackground)
