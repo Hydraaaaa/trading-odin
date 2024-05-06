@@ -23,12 +23,12 @@ VolumeProfile :: struct
     bottomPrice : f32,
     buckets : []VolumeProfileBucket,
 
-    pocIndex : int,
-    valIndex : int,
-    vahIndex : int,
+    pocIndex : int, // Point of Control
+    valIndex : int, // Value Area Low
+    vahIndex : int, // Value Area High
 
-    newValIndex : int,
-    newVahIndex : int,
+    tvValIndex : int, // TradingView Value Area Low
+    tvVahIndex : int, // TradingView Value Area High
 
     vwap : f32,
 }
@@ -40,7 +40,7 @@ VolumeProfileBucket :: struct
 }
 
 // Around 1000x faster if bucketSize is a multiple of provided pool's bucketSize
-VolumeProfile_Create :: proc(startTimestamp : i32, endTimestamp : i32, high : f32, low : f32, zoomIndex : Timeframe, chart : Chart, bucketSize : f32 = 5) -> VolumeProfile
+VolumeProfile_Create :: proc(startTimestamp : i32, endTimestamp : i32, high : f32, low : f32, chart : Chart, bucketSize : f32 = 5) -> VolumeProfile
 {
     if bucketSize <= 0
     {
@@ -254,7 +254,9 @@ VolumeProfile_CreateFromCandles :: proc(candles : []Candle, high : f32, low : f3
 @(private)
 VolumeProfile_Finalize :: proc(profile : ^VolumeProfile)
 {
+    // Calculate Point of Control + Total Volume
     highestBucketVolume := profile.buckets[0].buyVolume + profile.buckets[0].sellVolume
+    totalVolume : f32 = highestBucketVolume
 
     for bucket, i in profile.buckets[1:]
     {
@@ -264,15 +266,10 @@ VolumeProfile_Finalize :: proc(profile : ^VolumeProfile)
             profile.pocIndex = i + 1
         }
 
-    }
-
-    totalVolume : f32 = 0
-
-    for bucket in profile.buckets
-    {
         totalVolume += bucket.buyVolume + bucket.sellVolume
     }
 
+    // Calculate Volume Weighted Average Price
     vwapVolume := totalVolume / 2
 
     currentVolume : f32 = 0
@@ -295,6 +292,7 @@ VolumeProfile_Finalize :: proc(profile : ^VolumeProfile)
         }
     }
 
+    // Calculate Value Area
     startIndex := 0
     numBuckets := 1
     volumeThreshold := totalVolume * 0.682
@@ -342,8 +340,40 @@ VolumeProfile_Finalize :: proc(profile : ^VolumeProfile)
         newStartIndex += 1
     }
 
-    profile.newValIndex = startIndex
-    profile.newVahIndex = startIndex + numBuckets
+    profile.valIndex = startIndex
+    profile.vahIndex = startIndex + numBuckets
+
+    // Calculate TradingView Value Area
+    valIndex := profile.pocIndex
+    vahIndex := profile.pocIndex
+    currentVolume = highestBucketVolume
+
+    for currentVolume < volumeThreshold
+    {
+        upperVolume := profile.buckets[math.min(vahIndex + 1, len(profile.buckets) - 1)].buyVolume + \
+                       profile.buckets[math.min(vahIndex + 1, len(profile.buckets) - 1)].sellVolume + \
+                       profile.buckets[math.min(vahIndex + 2, len(profile.buckets) - 1)].buyVolume + \
+                       profile.buckets[math.min(vahIndex + 2, len(profile.buckets) - 1)].sellVolume
+
+        lowerVolume := profile.buckets[math.max(valIndex - 1, 0)].buyVolume + \
+                       profile.buckets[math.max(valIndex - 1, 0)].sellVolume + \
+                       profile.buckets[math.max(valIndex - 2, 0)].buyVolume + \
+                       profile.buckets[math.max(valIndex - 2, 0)].sellVolume
+
+        if upperVolume > lowerVolume && vahIndex != len(profile.buckets) || valIndex == 0
+        {
+            currentVolume += upperVolume
+            vahIndex = math.min(vahIndex + 2, len(profile.buckets) - 1)
+        }
+        else
+        {
+            currentVolume += lowerVolume
+            valIndex = math.max(valIndex - 2, 0)
+        }
+    }
+
+    profile.tvValIndex = valIndex
+    profile.tvVahIndex = vahIndex
 }
 
 VolumeProfile_Destroy :: proc(profile : VolumeProfile)

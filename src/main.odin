@@ -301,7 +301,7 @@ main :: proc()
 				highCandle, _ := Candle_HighestHigh(chart.candles[rulerZoomIndex].candles[startIndex:endIndex])
 				lowCandle, _ := Candle_LowestLow(chart.candles[rulerZoomIndex].candles[startIndex:endIndex])
 
-				rulerProfile = VolumeProfile_Create(rulerStartTimestamp, rulerEndTimestamp, highCandle.high, lowCandle.low, rulerZoomIndex, chart, 25)
+				rulerProfile = VolumeProfile_Create(rulerStartTimestamp, rulerEndTimestamp, highCandle.high, lowCandle.low, chart, 25)
 			}
 		}
 
@@ -963,7 +963,9 @@ main :: proc()
 		if rulerProfile.bucketSize != 0
 		{
 			startPixel := Timestamp_ToPixelX(rulerStartTimestamp, scaleData)
-			DrawVolumeProfile(startPixel - cameraPosX, Timestamp_ToPixelX(rulerEndTimestamp, scaleData) - startPixel, cameraPosY, rulerProfile, scaleData)
+			width := Timestamp_ToPixelX(rulerEndTimestamp, scaleData) - startPixel
+			DrawVolumeProfile(startPixel - cameraPosX, width, cameraPosY, rulerProfile, scaleData, true, false, false, false, false)
+			DrawVolumeProfile(startPixel - cameraPosX + width, width, cameraPosY, rulerProfile, scaleData, false, true, true, true, true)
 		}
 
 		// Draw Candles
