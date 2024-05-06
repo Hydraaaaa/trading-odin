@@ -960,6 +960,7 @@ main :: proc()
 			}
 		}
 		
+		if rulerProfile.bucketSize != 0
 		{
 			startPixel := Timestamp_ToPixelX(rulerStartTimestamp, scaleData)
 			DrawVolumeProfile(startPixel - cameraPosX, Timestamp_ToPixelX(rulerEndTimestamp, scaleData) - startPixel, cameraPosY, rulerProfile, scaleData)
