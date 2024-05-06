@@ -62,7 +62,9 @@ VolumeProfile_Create :: proc(startTimestamp : i32, endTimestamp : i32, high : f3
     
     profile.buckets = make([]VolumeProfileBucket, int((topPrice - profile.bottomPrice) / bucketSize))
     
-    startIndex := CandleList_TimestampToIndex(chart.candles[Timeframe.HOUR], startTimestamp)
+    // (startTimestamp - 1) + 1 effectively makes the index round up instead of down
+    // So a timestamp on an exact hour will match, but anything above that will point to the next candle
+    startIndex := CandleList_TimestampToIndex(chart.candles[Timeframe.HOUR], startTimestamp - 1) + 1
     startIndex = math.max(startIndex, 0)
     startIndex = math.min(startIndex, i32(len(chart.candles[Timeframe.HOUR].candles) - 1))
     startIndexTimestamp := CandleList_IndexToTimestamp(chart.candles[Timeframe.HOUR], startIndex)
@@ -71,16 +73,16 @@ VolumeProfile_Create :: proc(startTimestamp : i32, endTimestamp : i32, high : f3
     endIndex = math.max(endIndex, 0)
     endIndex = math.min(endIndex, i32(len(chart.candles[Timeframe.HOUR].candles) - 1))
     endIndexTimestamp := CandleList_IndexToTimestamp(chart.candles[Timeframe.HOUR], endIndex)
-    
-    tradesStartTimestamp := startIndexTimestamp
-    tradesEndTimestamp := startTimestamp
+
+    tradesStartTimestamp := startTimestamp
+    tradesEndTimestamp := startIndexTimestamp
     
     // If the entire timespan happens within a single hour candle, adjust bounds accordingly
-    if startIndex == endIndex
+    if startIndex >= endIndex
     {
         tradesEndTimestamp = endTimestamp
     }
-    
+
     // Load any trades before the beginning of the first hour profile
     if tradesStartTimestamp < tradesEndTimestamp
     {
@@ -103,12 +105,10 @@ VolumeProfile_Create :: proc(startTimestamp : i32, endTimestamp : i32, high : f3
             //    profile.buckets[int((startTrades[i].price - profile.bottomPrice) / bucketSize)].sellVolume += startTrades[i].volume
             //}
         }
-        
-        startIndex += 1
     }
     
     // If timespan extends beyond a single hour candle
-    if startIndex <= endIndex
+    if startIndex < endIndex
     {
         tradesStartTimestamp = endIndexTimestamp
         tradesEndTimestamp = endTimestamp
