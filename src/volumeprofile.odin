@@ -24,12 +24,13 @@ VolumeProfile :: struct
     buckets : []VolumeProfileBucket,
 
     pocIndex : int,
-    vahIndex : int,
     valIndex : int,
-    
+    vahIndex : int,
+
+    newValIndex : int,
+    newVahIndex : int,
+
     vwap : f32,
-    vwapLowDeviation : f32,
-    vwapHighDeviation : f32,
 }
 
 VolumeProfileBucket :: struct
@@ -262,20 +263,20 @@ VolumeProfile_Finalize :: proc(profile : ^VolumeProfile)
             highestBucketVolume = bucket.buyVolume + bucket.sellVolume
             profile.pocIndex = i + 1
         }
-        
+
     }
-    
-    vwapVolume : f32 = 0
-    
+
+    totalVolume : f32 = 0
+
     for bucket in profile.buckets
     {
-        vwapVolume += bucket.buyVolume + bucket.sellVolume
+        totalVolume += bucket.buyVolume + bucket.sellVolume
     }
-    
-    vwapVolume /= 2
+
+    vwapVolume := totalVolume / 2
 
     currentVolume : f32 = 0
-        
+
     for bucket, i in profile.buckets
     {
         if currentVolume + bucket.buyVolume + bucket.sellVolume < vwapVolume
@@ -293,6 +294,56 @@ VolumeProfile_Finalize :: proc(profile : ^VolumeProfile)
             break
         }
     }
+
+    startIndex := 0
+    numBuckets := 1
+    volumeThreshold := totalVolume * 0.682
+    currentVolume = profile.buckets[0].buyVolume + profile.buckets[0].sellVolume
+
+    for currentVolume < volumeThreshold
+    {
+        currentVolume += profile.buckets[numBuckets].buyVolume + profile.buckets[numBuckets].sellVolume
+        numBuckets += 1
+    }
+
+    newVolume := currentVolume - profile.buckets[0].buyVolume - profile.buckets[0].sellVolume
+    newStartIndex := startIndex + 1
+    newNumBuckets := numBuckets
+
+    for newStartIndex + newNumBuckets < len(profile.buckets)
+    {
+        newVolume += profile.buckets[newStartIndex + newNumBuckets].buyVolume + profile.buckets[newStartIndex + newNumBuckets].sellVolume
+
+        if newVolume > currentVolume
+        {
+            currentVolume = newVolume
+            startIndex = newStartIndex
+        }
+
+        smallerVolume := newVolume - profile.buckets[newStartIndex].buyVolume + profile.buckets[newStartIndex].sellVolume
+        smallerStartIndex := newStartIndex + 1
+        smallerNumBuckets := newNumBuckets - 1
+
+        for smallerVolume > volumeThreshold
+        {
+            currentVolume = smallerVolume
+            newVolume = smallerVolume
+            startIndex = smallerStartIndex
+            newStartIndex = smallerStartIndex
+            numBuckets = smallerNumBuckets
+            numBuckets = smallerNumBuckets
+
+            smallerVolume -= profile.buckets[smallerStartIndex].buyVolume + profile.buckets[smallerStartIndex].sellVolume
+            smallerStartIndex += 1
+            smallerNumBuckets -= 1
+        }
+
+        newVolume -= profile.buckets[newStartIndex].buyVolume + profile.buckets[newStartIndex].sellVolume
+        newStartIndex += 1
+    }
+
+    profile.newValIndex = startIndex
+    profile.newVahIndex = startIndex + numBuckets
 }
 
 VolumeProfile_Destroy :: proc(profile : VolumeProfile)

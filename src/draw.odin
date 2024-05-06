@@ -12,16 +12,16 @@ DrawVolumeProfile :: proc(posX : i32, width : i32, cameraPosY : i32, profile : V
     {
         bucketStartPixel := Price_ToPixelY(profile.bottomPrice + profile.bucketSize * f32(index), scaleData) - cameraPosY
         bucketEndPixel := Price_ToPixelY(profile.bottomPrice + profile.bucketSize * f32(index + 1), scaleData) - cameraPosY
-        
+
         bucketThickness := math.max(bucketStartPixel - bucketEndPixel, 1)
-        
+
         buyPixels := i32(bucket.buyVolume / highestBucketVolume * f32(width))
         sellPixels := i32(bucket.sellVolume / highestBucketVolume * f32(width))
 
         raylib.DrawRectangle(posX, bucketEndPixel, buyPixels, bucketThickness, raylib.BLUE)
         raylib.DrawRectangle(posX + buyPixels, bucketEndPixel, sellPixels, bucketThickness, raylib.ORANGE)
     }
-    
+
     if drawValueArea
     {
         bucketStartPixel := Price_ToPixelY(profile.bottomPrice + profile.bucketSize * f32(profile.pocIndex), scaleData) - cameraPosY
@@ -33,8 +33,25 @@ DrawVolumeProfile :: proc(posX : i32, width : i32, cameraPosY : i32, profile : V
         color.a = 191
 
         raylib.DrawRectangle(posX, bucketEndPixel, width, bucketThickness, color)
+
+        color = raylib.SKYBLUE
+        color.a = 191
+
+        bucketStartPixel = Price_ToPixelY(profile.bottomPrice + profile.bucketSize * f32(profile.newValIndex), scaleData) - cameraPosY
+        bucketEndPixel = Price_ToPixelY(profile.bottomPrice + profile.bucketSize * f32(profile.newValIndex + 1), scaleData) - cameraPosY
+
+        bucketThickness = math.max(bucketStartPixel - bucketEndPixel, 1)
+
+        raylib.DrawRectangle(posX, bucketEndPixel, width, bucketThickness, color)
+
+        bucketStartPixel = Price_ToPixelY(profile.bottomPrice + profile.bucketSize * f32(profile.newVahIndex), scaleData) - cameraPosY
+        bucketEndPixel = Price_ToPixelY(profile.bottomPrice + profile.bucketSize * f32(profile.newVahIndex + 1), scaleData) - cameraPosY
+
+        bucketThickness = math.max(bucketStartPixel - bucketEndPixel, 1)
+
+        raylib.DrawRectangle(posX, bucketEndPixel, width, bucketThickness, color)
     }
-    
+
     if drawVwap
     {
         pixelY := Price_ToPixelY(profile.vwap, scaleData) - cameraPosY
