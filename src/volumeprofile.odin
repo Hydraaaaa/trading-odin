@@ -20,9 +20,16 @@ VolumeProfileHeader :: struct
 VolumeProfile :: struct
 {
     bucketSize : f32,
-    highestBucketVolume : f32,
     bottomPrice : f32,
     buckets : []VolumeProfileBucket,
+
+    pocIndex : int,
+    vahIndex : int,
+    valIndex : int,
+    
+    vwap : f32,
+    vwapLowDeviation : f32,
+    vwapHighDeviation : f32,
 }
 
 VolumeProfileBucket :: struct
@@ -63,7 +70,7 @@ VolumeProfile_Create :: proc(startTimestamp : i32, endTimestamp : i32, high : f3
     profile.buckets = make([]VolumeProfileBucket, int((topPrice - profile.bottomPrice) / bucketSize))
     
     // (startTimestamp - 1) + 1 effectively makes the index round up instead of down
-    // So a timestamp on an exact hour will match, but anything above that will point to the next candle
+    // So a timestamp on an exact hour will match, but anything above that will point to the next hour
     startIndex := CandleList_TimestampToIndex(chart.candles[Timeframe.HOUR], startTimestamp - 1) + 1
     startIndex = math.max(startIndex, 0)
     startIndex = math.min(startIndex, i32(len(chart.candles[Timeframe.HOUR].candles) - 1))
@@ -141,22 +148,19 @@ VolumeProfile_Create :: proc(startTimestamp : i32, endTimestamp : i32, high : f3
     // Load hourly profiles
     profileIndexOffset := i32(low / bucketSize)
     
-    for profileHeader in chart.hourVolumeProfilePool.headers[startIndex:endIndex]
+    if startIndex < endIndex
     {
-        for bucket, i in chart.hourVolumeProfilePool.buckets[profileHeader.bucketPoolIndex:profileHeader.bucketPoolIndex + profileHeader.bucketCount]
+        for profileHeader in chart.hourVolumeProfilePool.headers[startIndex:endIndex]
         {
-            profile.buckets[((profileHeader.relativeIndexOffset + i32(i)) * chart.hourVolumeProfilePool.bucketSize / i32(bucketSize)) - profileIndexOffset].buyVolume += bucket.buyVolume
-            profile.buckets[((profileHeader.relativeIndexOffset + i32(i)) * chart.hourVolumeProfilePool.bucketSize / i32(bucketSize)) - profileIndexOffset].sellVolume += bucket.sellVolume
+            for bucket, i in chart.hourVolumeProfilePool.buckets[profileHeader.bucketPoolIndex:profileHeader.bucketPoolIndex + profileHeader.bucketCount]
+            {
+                profile.buckets[((profileHeader.relativeIndexOffset + i32(i)) * chart.hourVolumeProfilePool.bucketSize / i32(bucketSize)) - profileIndexOffset].buyVolume += bucket.buyVolume
+                profile.buckets[((profileHeader.relativeIndexOffset + i32(i)) * chart.hourVolumeProfilePool.bucketSize / i32(bucketSize)) - profileIndexOffset].sellVolume += bucket.sellVolume
+            }
         }
     }
 
-    for bucket in profile.buckets
-    {
-        if bucket.buyVolume + bucket.sellVolume > profile.highestBucketVolume
-        {
-            profile.highestBucketVolume = bucket.buyVolume + bucket.sellVolume
-        }
-    }
+    VolumeProfile_Finalize(&profile)
     
     return profile
 }
@@ -189,14 +193,8 @@ VolumeProfile_CreateFromTrades :: proc(trades : []Trade, high : f32, low : f32, 
         //}
     }
     
-    for bucket in profile.buckets
-    {
-        if bucket.buyVolume + bucket.sellVolume > profile.highestBucketVolume
-        {
-            profile.highestBucketVolume = bucket.buyVolume + bucket.sellVolume
-        }
-    }
-    
+    VolumeProfile_Finalize(&profile)
+
     return profile
 }
 
@@ -247,15 +245,54 @@ VolumeProfile_CreateFromCandles :: proc(candles : []Candle, high : f32, low : f3
         }
     }
     
-    for bucket in profile.buckets
-    {
-        if bucket.buyVolume + bucket.sellVolume > profile.highestBucketVolume
-        {
-            profile.highestBucketVolume = bucket.buyVolume + bucket.sellVolume
-        }
-    }
+    VolumeProfile_Finalize(&profile)
     
     return profile
+}
+
+@(private)
+VolumeProfile_Finalize :: proc(profile : ^VolumeProfile)
+{
+    highestBucketVolume := profile.buckets[0].buyVolume + profile.buckets[0].sellVolume
+    
+    for bucket, i in profile.buckets[1:]
+    {
+        if bucket.buyVolume + bucket.sellVolume > highestBucketVolume
+        {
+            highestBucketVolume = bucket.buyVolume + bucket.sellVolume
+            profile.pocIndex = i + 1
+        }
+        
+    }
+    
+    vwapVolume : f32 = 0
+    
+    for bucket in profile.buckets
+    {
+        vwapVolume += bucket.buyVolume + bucket.sellVolume
+    }
+    
+    vwapVolume /= 2
+
+    currentVolume : f32 = 0
+        
+    for bucket, i in profile.buckets
+    {
+        if currentVolume + bucket.buyVolume + bucket.sellVolume < vwapVolume
+        {
+            currentVolume += bucket.buyVolume + bucket.sellVolume
+        }
+        else
+        {
+            increment := vwapVolume - currentVolume
+            
+            // Get partial index based on the percentage of the bucket that gets counted before currentVolume == vwapVolume
+            index := f32(i - 1) + (increment / (bucket.buyVolume + bucket.sellVolume))
+            
+            profile.vwap = profile.bottomPrice + index * profile.bucketSize
+            break
+        }
+    }
 }
 
 VolumeProfile_Destroy :: proc(profile : VolumeProfile)
