@@ -364,6 +364,7 @@ AppendDay :: proc(trades : ^[]Trade, chart : ^Chart)
 
 	delete(trades^)
 	chart.dateToDownload = nextDate
+	append(&chart.dailyVolumeProfiles, VolumeProfile{})
 }
 
 LoadTradesBetween :: proc(start : i32, end : i32, buffer : ^[dynamic]Trade)

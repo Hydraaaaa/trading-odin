@@ -194,6 +194,20 @@ main :: proc()
 
 	scaleData.verticalScale = initialVerticalScale
 
+	reserve(&chart.dailyVolumeProfiles, len(chart.candles[Timeframe.DAY].candles) + 7)
+	resize(&chart.dailyVolumeProfiles, len(chart.candles[Timeframe.DAY].candles))
+
+	defer for i in 0 ..< len(chart.dailyVolumeProfiles)
+	{
+		if chart.dailyVolumeProfiles[i].bucketSize != 0
+		{
+			VolumeProfile_Destroy(chart.dailyVolumeProfiles[i])
+		}
+	}
+
+
+	testData := ExportPreviousDayVolumeProfileSuccessRate(chart)
+	defer delete(testData)
 
 	// UPDATE <><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
 	for !WindowShouldClose()
@@ -1004,6 +1018,31 @@ main :: proc()
 			}
 		}
 
+		// Draw previous day volume profiles
+		if zoomIndex <= .HOUR
+		{
+			// Convert current visible indices to visible day indices - 1
+			startIndex := CandleList_TimestampToIndex(chart.candles[Timeframe.DAY], CandleList_IndexToTimestamp(chart.candles[zoomIndex], visibleCandlesStartIndex)) - 1
+			endIndex := CandleList_TimestampToIndex(chart.candles[Timeframe.DAY], CandleList_IndexToTimestamp(chart.candles[zoomIndex], visibleCandlesStartIndex + i32(len(visibleCandles))))
+
+			for i in startIndex ..< endIndex
+			{
+				startTimestamp := CandleList_IndexToTimestamp(chart.candles[Timeframe.DAY], i32(i))
+				endTimestamp := CandleList_IndexToTimestamp(chart.candles[Timeframe.DAY], i32(i) + 1)
+				if chart.dailyVolumeProfiles[i].bucketSize == 0
+				{
+					startTimestamp := CandleList_IndexToTimestamp(chart.candles[Timeframe.DAY], i32(i))
+					endTimestamp := CandleList_IndexToTimestamp(chart.candles[Timeframe.DAY], i32(i) + 1)
+					dayCandle := chart.candles[Timeframe.DAY].candles[i]
+					chart.dailyVolumeProfiles[i] = VolumeProfile_Create(startTimestamp, endTimestamp, dayCandle.high, dayCandle.low, chart, 25)
+				}
+
+				startPixel := CandleList_IndexToPixelX(chart.candles[Timeframe.DAY], i32(i) + 1, scaleData)
+				endPixel := CandleList_IndexToPixelX(chart.candles[Timeframe.DAY], i32(i) + 2, scaleData)
+
+				DrawVolumeProfile(startPixel - cameraPosX, endPixel - startPixel, cameraPosY, chart.dailyVolumeProfiles[i], scaleData, 63, false, true, true, true, true)
+			}
+		}
 		// Snap cursor to nearest OHLC value
 		mouseY := GetMouseY()
 		mouseSnapPrice : f32
