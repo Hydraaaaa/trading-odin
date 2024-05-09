@@ -68,7 +68,7 @@ main :: proc()
 
 	Chart_CreateHTFCandles(&chart)
 
-	week := HalfHourCandleWeek_CloseOffset(chart, true)
+	week := HalfHourCandleWeek_Range(chart)
 	dayOfWeekStrings := [7]string{"Mon\x00", "Tue\x00", "Wed\x00", "Thur\x00", "Fri\x00", "Sat\x00", "Sun\x00"}
 
 	// UPDATE <><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
@@ -98,7 +98,7 @@ main :: proc()
 
 			range := week.highestValue - week.lowestValue
 
-			labelValue := -1500
+			labelValue := 50
 
 			labelHeight := (1 - ((f32(labelValue) - week.lowestValue) / range)) * SCREEN_HEIGHT
 
@@ -113,7 +113,7 @@ main :: proc()
 				lineColor.a = 127
 				DrawLine(i32(chartOffset), i32(labelHeight), SCREEN_WIDTH, i32(labelHeight), lineColor)
 
-				labelValue += 250
+				labelValue += 50
 				labelHeight = (1 - ((f32(labelValue) - week.lowestValue) / range)) * SCREEN_HEIGHT
 			}
 		}

@@ -91,7 +91,7 @@ HalfHourCandleWeek_PriceMovement :: proc(chart : main.Chart, abs : bool = false)
     return week
 }
 
-// Difference between close of each half an hour candle, and the open of the first candle of the day or week
+// Difference between close of each half hour candle, and the open of the first candle of the day or week
 HalfHourCandleWeek_CloseOffset :: proc(chart : main.Chart, sampleWeek : bool = false) -> HalfHourCandleWeek
 {
     using main
@@ -126,6 +126,75 @@ HalfHourCandleWeek_CloseOffset :: proc(chart : main.Chart, sampleWeek : bool = f
 
     return week
 }
+
+// Difference between high and low of each half hour candle
+HalfHourCandleWeek_Range :: proc(chart : main.Chart) -> HalfHourCandleWeek
+{
+    using main
+
+    week : HalfHourCandleWeek
+
+    candlesStartIndex := CandleList_TimestampToIndex(chart.candles[Timeframe.MINUTE_30], APR_1ST_2020)
+    candles := chart.candles[Timeframe.MINUTE_30].candles[candlesStartIndex:]
+
+    for day in 0 ..< 7
+    {
+        for weekIndex := 0; weekIndex < len(candles) - 48 * 7; weekIndex += 48 * 7
+        {
+            for dataIndex in 0 ..< 48
+            {
+                candleIndex := weekIndex + day * 48 + dataIndex
+                append(&week.data[day][dataIndex].values, candles[candleIndex].high - candles[candleIndex].low)
+                week.data[day][dataIndex].mean += candles[candleIndex].high - candles[candleIndex].low
+            }
+        }
+    }
+
+    CalculateDatapoints(&week)
+
+    return week
+}
+
+// WIP
+// Difference between high of each half hour candle, and the average price of the week
+//HalfHourCandleWeek_High :: proc(chart : main.Chart) -> HalfHourCandleWeek
+//{
+//    using main
+//
+//    week : HalfHourCandleWeek
+//
+//    candlesStartIndex := CandleList_TimestampToIndex(chart.candles[Timeframe.MINUTE_30], APR_1ST_2020)
+//    candles := chart.candles[Timeframe.MINUTE_30].candles[candlesStartIndex:]
+//
+//    weekAverages : [dynamic]f32
+//
+//    for weekIndex := 0; weekIndex < len(candles) / (48 * 7) - 1; weekIndex += 1
+//    {
+//        for dataIndex in 0 ..< 48 * 7
+//        {
+//            weekAverages[weekIndex] += candles[weekIndex * 48 * 7 + dataIndex]
+//        }
+//
+//        weekAverages[weekIndex] /= 48 * 7
+//    }
+//
+//    for day in 0 ..< 7
+//    {
+//        for weekIndex := 0; weekIndex < len(candles) - 48 * 7; weekIndex += 48 * 7
+//        {
+//            for dataIndex in 0 ..< 48
+//            {
+//                candleIndex := weekIndex + day * 48 + dataIndex
+//                append(&week.data[day][dataIndex].values, candles[candleIndex].close - candles[weekIndex].open)
+//                week.data[day][dataIndex].mean += candles[candleIndex].close - candles[weekIndex].open
+//            }
+//        }
+//    }
+//
+//    CalculateDatapoints(&week)
+//
+//    return week
+//}
 
 CalculateDatapoints :: proc(week : ^HalfHourCandleWeek)
 {
