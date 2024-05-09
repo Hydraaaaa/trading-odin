@@ -7,7 +7,7 @@ import "core:strings"
 import "core:strconv"
 import "core:compress/gzip"
 
-import "odin-http/client"
+import "../odin-http/client"
 
 BYBIT_ORIGIN_DATE :: DayMonthYear{25, 3, 2020}
 BYBIT_ORIGIN_MINUTE_TIMESTAMP :: 1_585_132_560 - TIMESTAMP_2010

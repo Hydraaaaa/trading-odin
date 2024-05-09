@@ -5,6 +5,6 @@ minutecandles.bin
 trades.bin
 hourvolumeprofilebuckets.bin
 hourvolumeprofileheaders.bin
-src.exe
-src.pdb
+*.exe
+*.pdb
 ols.json

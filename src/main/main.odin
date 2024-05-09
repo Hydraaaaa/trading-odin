@@ -54,8 +54,9 @@ main :: proc()
 
 	chart.dateToDownload = LoadDateToDownload()
 
-	chart.candles[Timeframe.MINUTE].candles = LoadMinuteCandles()
 	chart.candles[Timeframe.MINUTE].offset = BYBIT_ORIGIN_MINUTE_TIMESTAMP
+	chart.candles[Timeframe.MINUTE].candles = LoadMinuteCandles()
+	defer delete(chart.candles[Timeframe.MINUTE].candles)
 
 	// Init chart.candles offsets and timeframes
 	{
@@ -82,8 +83,6 @@ main :: proc()
 		chart.candles[Timeframe.MONTH].offset = chart.candles[prevTimeframe].offset - fourYearTimestamp + monthlyIncrements[fourYearIndex]
 		chart.candles[Timeframe.MONTH].timeframe = Timeframe.MONTH
 	}
-
-	defer delete(chart.candles[Timeframe.MINUTE].candles)
 
 	// Time is UTC, which matches Bybit's historical data upload time
 	currentDate := Timestamp_ToDayMonthYear(i32(time.now()._nsec / i64(time.Second)) - TIMESTAMP_2010)
@@ -204,10 +203,6 @@ main :: proc()
 			VolumeProfile_Destroy(chart.dailyVolumeProfiles[i])
 		}
 	}
-
-
-	testData := ExportPreviousDayVolumeProfileSuccessRate(chart)
-	defer delete(testData)
 
 	// UPDATE <><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
 	for !WindowShouldClose()
@@ -1043,6 +1038,7 @@ main :: proc()
 				DrawVolumeProfile(startPixel - cameraPosX, endPixel - startPixel, cameraPosY, chart.dailyVolumeProfiles[i], scaleData, 63, false, true, true, true, true)
 			}
 		}
+
 		// Snap cursor to nearest OHLC value
 		mouseY := GetMouseY()
 		mouseSnapPrice : f32
