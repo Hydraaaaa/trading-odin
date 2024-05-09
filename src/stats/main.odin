@@ -5,6 +5,7 @@ import "core:math"
 import "core:os"
 import "core:strconv"
 import "core:slice"
+import "core:strings"
 import "vendor:raylib"
 import "core:encoding/csv"
 
@@ -14,7 +15,7 @@ FONT_SIZE :: 14
 
 main :: proc()
 {
-	SCREEN_WIDTH :: 1750
+	SCREEN_WIDTH :: 1712
 	SCREEN_HEIGHT :: 500
 
 	using main
@@ -68,11 +69,10 @@ main :: proc()
 
 	Chart_CreateHTFCandles(&chart)
 
-	halfHourCandleVolume := GetHalfHourCandleVolume(chart)
-
-	highestValue := halfHourCandleVolume.highestValue
-
 	dayOfWeekHalfHourCandleVolume : [7]HalfHourCandleVolume
+	dayOfWeekStrings := [7]string{"Mon\x00", "Tue\x00", "Wed\x00", "Thur\x00", "Fri\x00", "Sat\x00", "Sun\x00"}
+
+	highestValue : f32 = 0
 
 	for i in 0 ..< 7
 	{
@@ -88,16 +88,42 @@ main :: proc()
 
 		ClearBackground(BLACK)
 
-		//DrawHalfHourCandleVolume(halfHourCandleVolume, 0, 0, 400, 400, highestValue)
-
-		posX : i32 = 0
-		posY : i32 = 0
-
-		for i in 0 ..< 7
+		// Half-hour candle volume for each day of the week
 		{
-			DrawHalfHourCandleVolume(dayOfWeekHalfHourCandleVolume[i], posX, posY, SCREEN_WIDTH / 7, SCREEN_HEIGHT, highestValue)
+			posX : f32 = 32
+			posY : f32 = 0
 
-			posX += SCREEN_WIDTH / 7
+			chartWidth := f32(SCREEN_WIDTH - posX) / 7
+
+			labelValue := 1000
+			labelHeight := (1 - (f32(labelValue) / highestValue)) * SCREEN_HEIGHT
+
+			textBuffer : [16]u8
+
+			for labelHeight > 0
+			{
+				fmt.bprintf(textBuffer[:], "%i\x00", labelValue)
+				textDimensions := MeasureTextEx(font, cstring(&textBuffer[0]), FONT_SIZE, 0)
+				DrawTextEx(font, cstring(&textBuffer[0]), {posX - textDimensions[0] - 4, labelHeight - textDimensions[1] / 2}, FONT_SIZE, 0, WHITE)
+				lineColor := WHITE
+				lineColor.a = 127
+				DrawLine(i32(posX), i32(labelHeight), SCREEN_WIDTH, i32(labelHeight), lineColor)
+
+				labelValue += 1000
+				labelHeight = (1 - (f32(labelValue) / highestValue)) * SCREEN_HEIGHT
+			}
+
+			for i in 0 ..< 7
+			{
+				DrawHalfHourCandleVolume(dayOfWeekHalfHourCandleVolume[i], font, posX, posY, chartWidth, SCREEN_HEIGHT, highestValue)
+
+				dayOfWeekHalfHourCandleVolume[i] = GetHalfHourCandleVolumeByDayOfWeek(chart, DayOfWeek(i))
+
+				DrawTextEx(font, strings.unsafe_string_to_cstring(dayOfWeekStrings[i]), {f32(posX), 0}, FONT_SIZE, 0, WHITE)
+				DrawLine(i32(posX), 0, i32(posX), SCREEN_HEIGHT, WHITE)
+
+				posX += chartWidth
+			}
 		}
 
         EndDrawing()

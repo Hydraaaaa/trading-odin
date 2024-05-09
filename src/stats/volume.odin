@@ -132,28 +132,48 @@ GetHalfHourCandleVolumeByDayOfWeek :: proc(chart : main.Chart, day : main.DayOfW
     return volume
 }
 
-DrawHalfHourCandleVolume :: proc(volume : HalfHourCandleVolume, posX : i32, posY : i32, width : i32, height : i32, highestValue : f32 = 0)
+DrawHalfHourCandleVolume :: proc(volume : HalfHourCandleVolume, font : raylib.Font, posX : f32, posY : f32, width : f32, height : f32, highestValue : f32 = 0)
 {
     using main
     using raylib
 
+    asiaStart := i32(posX)
+    asiaLength := i32(width / (48.0 / 16))
+    londonStart := i32(posX) + asiaLength
+    londonLength := i32(width / (48.0 / 17))
+    newYorkStart := i32(posX + width / (48.0 / 27))
+    newYorkLength := i32(width / (48.0 / 13))
+
+    asiaColor := RED
+    asiaColor.a = 63
+    londonColor := YELLOW
+    londonColor.a = 63
+    newYorkColor := BLUE
+    newYorkColor.a = 63
+
+    DrawRectangle(asiaStart, i32(posY), asiaLength, i32(height), asiaColor)
+    DrawTextEx(font, "Asia\x00", {f32(asiaStart), posY + height - 14}, FONT_SIZE, 0, WHITE)
+    DrawRectangle(londonStart, i32(posY), londonLength, i32(height), londonColor)
+    DrawTextEx(font, "London\x00", {f32(londonStart), posY + height - 14}, FONT_SIZE, 0, WHITE)
+    DrawRectangle(newYorkStart, i32(posY), newYorkLength, i32(height), newYorkColor)
+    DrawTextEx(font, "New York\x00", {f32(newYorkStart), posY + height - 14}, FONT_SIZE, 0, WHITE)
+
     high := highestValue == 0 ? volume.highestValue  : highestValue
 
-	columnHeaders := [48]string{"10:00", "10:30", "11:00", "11:30", "12:00", "12:30", "13:00", "13:30", "14:00", "14:30", "15:00", "15:30", "16:00", "16:30", "17:00", "17:30", "18:00", "18:30", "19:00", "19:30", "20:00", "20:30", "21:00", "21:30", "22:00", "22:30", "23:00", "23:30", "00:00", "00:30", "01:00", "01:30", "02:00", "02:30", "03:00", "03:30", "04:00", "04:30", "05:00", "05:30", "06:00", "06:30", "07:00", "07:30", "08:00", "08:30", "09:00", "09:30"}
-    columnWidth := width / 48
+    columnWidth := f32(width / 48)
 
     for volumeData, i in volume.volumeData
     {
-        Q3Y := posY + i32((1 - (volumeData.Q3 / high)) * f32(height))
-        medianY := posY + i32((1 - (volumeData.median / high)) * f32(height))
-        Q1Y := posY + i32((1 - (volumeData.Q1 / high)) * f32(height))
+        Q3Y := posY + (1 - (volumeData.Q3 / high)) * height
+        medianY := posY + (1 - (volumeData.median / high)) * height
+        Q1Y := posY + (1 - (volumeData.Q1 / high)) * height
 
-        DrawRectangle(posX + i32(i) * columnWidth, Q3Y, columnWidth, medianY - Q3Y, BLUE)
-        DrawRectangle(posX + i32(i) * columnWidth, medianY, columnWidth, Q1Y - medianY, BLUE)
-        DrawLine(posX + i32(i) * columnWidth, medianY, posX + i32(i) * columnWidth + columnWidth, medianY, WHITE)
+        DrawRectangle(i32(posX + f32(i) * columnWidth), i32(Q3Y), i32(columnWidth), i32(medianY - Q3Y), BLUE)
+        DrawRectangle(i32(posX + f32(i) * columnWidth), i32(medianY), i32(columnWidth), i32(Q1Y - medianY), BLUE)
+        DrawLine(i32(posX + f32(i) * columnWidth), i32(medianY), i32(posX + f32(i) * columnWidth + columnWidth), i32(medianY), WHITE)
 
-        meanY := posY + i32((1 - (volumeData.mean / high)) * f32(height))
-        DrawCircle(posX + i32(i) * columnWidth + columnWidth / 2, meanY, f32(columnWidth) / 4, RED)
+        meanY := i32(posY + (1 - (volumeData.mean / high)) * height)
+        DrawCircle(i32(posX + f32(i) * columnWidth + columnWidth / 2), meanY, columnWidth / 3, RED)
     }
 }
 
