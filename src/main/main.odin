@@ -195,12 +195,22 @@ main :: proc()
 
 	reserve(&chart.dailyVolumeProfiles, len(chart.candles[Timeframe.DAY].candles) + 7)
 	resize(&chart.dailyVolumeProfiles, len(chart.candles[Timeframe.DAY].candles))
+	reserve(&chart.weeklyVolumeProfiles, len(chart.candles[Timeframe.WEEK].candles) + 1)
+	resize(&chart.weeklyVolumeProfiles, len(chart.candles[Timeframe.WEEK].candles))
 
 	defer for i in 0 ..< len(chart.dailyVolumeProfiles)
 	{
 		if chart.dailyVolumeProfiles[i].bucketSize != 0
 		{
 			VolumeProfile_Destroy(chart.dailyVolumeProfiles[i])
+		}
+	}
+
+	defer for i in 0 ..< len(chart.weeklyVolumeProfiles)
+	{
+		if chart.weeklyVolumeProfiles[i].bucketSize != 0
+		{
+			VolumeProfile_Destroy(chart.weeklyVolumeProfiles[i])
 		}
 	}
 
@@ -928,6 +938,27 @@ main :: proc()
 		//	}
 		//}
 
+		// Draw days of week
+		if zoomIndex <= .DAY
+		{
+			// Convert current visible indices into visible day indices
+			startIndex := CandleList_TimestampToIndex(chart.candles[Timeframe.DAY], CandleList_IndexToTimestamp(chart.candles[zoomIndex], visibleCandlesStartIndex))
+			endIndex := CandleList_TimestampToIndex(chart.candles[Timeframe.DAY], CandleList_IndexToTimestamp(chart.candles[zoomIndex], visibleCandlesStartIndex + i32(len(visibleCandles))))
+
+			for i in startIndex ..< endIndex
+			{
+				startPixel := CandleList_IndexToPixelX(chart.candles[Timeframe.DAY], i32(i), scaleData)
+				endPixel := CandleList_IndexToPixelX(chart.candles[Timeframe.DAY], i32(i) + 1, scaleData)
+
+				colors := [7]Color{RED, GREEN, YELLOW, PURPLE, BLUE, GRAY, WHITE}
+				colors[0].a = 31; colors[1].a = 31; colors[2].a = 31; colors[3].a = 31; colors[4].a = 31; colors[5].a = 31; colors[6].a = 31;
+
+				dayOfWeek := Timestamp_ToDayOfWeek(CandleList_IndexToTimestamp(chart.candles[Timeframe.DAY], i32(i)))
+
+				DrawRectangle(startPixel - cameraPosX, 0, endPixel - startPixel, screenHeight, colors[dayOfWeek])
+			}
+		}
+
 		// Draw HTF Candle Outlines
 		zoomIndexHTF := zoomIndex + Timeframe(1)
 
@@ -1010,6 +1041,32 @@ main :: proc()
 
 				DrawRectangle(xPos, scaledClose - cameraPosY, candleWidth, candleHeight, GREEN) // Body
 				DrawRectangle(xPos + i32(f32(candleWidth) / 2 - 0.5), scaledHigh - cameraPosY, 1, scaledLow - scaledHigh, GREEN) // Wick
+			}
+		}
+
+		// Draw previous week volume profiles
+		if zoomIndex <= .DAY
+		{
+			// Convert current visible indices to visible week indices - 1
+			startIndex := CandleList_TimestampToIndex(chart.candles[Timeframe.WEEK], CandleList_IndexToTimestamp(chart.candles[zoomIndex], visibleCandlesStartIndex)) - 1
+			endIndex := CandleList_TimestampToIndex(chart.candles[Timeframe.WEEK], CandleList_IndexToTimestamp(chart.candles[zoomIndex], visibleCandlesStartIndex + i32(len(visibleCandles))))
+
+			for i in startIndex ..< endIndex
+			{
+				startTimestamp := CandleList_IndexToTimestamp(chart.candles[Timeframe.WEEK], i32(i))
+				endTimestamp := CandleList_IndexToTimestamp(chart.candles[Timeframe.WEEK], i32(i) + 1)
+				if chart.weeklyVolumeProfiles[i].bucketSize == 0
+				{
+					startTimestamp := CandleList_IndexToTimestamp(chart.candles[Timeframe.WEEK], i32(i))
+					endTimestamp := CandleList_IndexToTimestamp(chart.candles[Timeframe.WEEK], i32(i) + 1)
+					weekCandle := chart.candles[Timeframe.WEEK].candles[i]
+					chart.weeklyVolumeProfiles[i] = VolumeProfile_Create(startTimestamp, endTimestamp, weekCandle.high, weekCandle.low, chart, 25)
+				}
+
+				startPixel := CandleList_IndexToPixelX(chart.candles[Timeframe.WEEK], i32(i) + 1, scaleData)
+				endPixel := CandleList_IndexToPixelX(chart.candles[Timeframe.WEEK], i32(i) + 2, scaleData)
+
+				DrawVolumeProfile(startPixel - cameraPosX, endPixel - startPixel, cameraPosY, chart.weeklyVolumeProfiles[i], scaleData, 95, false, true, true, true, true)
 			}
 		}
 

@@ -9,6 +9,7 @@ Chart :: struct
     candles : [TIMEFRAME_COUNT]CandleList,
     hourVolumeProfilePool : VolumeProfilePool,
     dailyVolumeProfiles : [dynamic]VolumeProfile,
+    weeklyVolumeProfiles : [dynamic]VolumeProfile,
     dateToDownload : DayMonthYear,
 }
 
