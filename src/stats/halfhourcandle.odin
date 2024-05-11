@@ -15,6 +15,8 @@ HalfHourCandleWeek :: struct
     data : [7][48]DataList,
     highestValue : f32,
     lowestValue : f32,
+    labelStart : f32,
+    labelIncrement : f32,
 }
 
 DataList :: struct
@@ -53,6 +55,9 @@ HalfHourCandleWeek_Volume :: proc(chart : main.Chart) -> HalfHourCandleWeek
 
     CalculateDatapoints(&week)
 
+    week.labelStart = 1000
+    week.labelIncrement = 1000
+
     return week
 }
 
@@ -88,10 +93,13 @@ HalfHourCandleWeek_PriceMovement :: proc(chart : main.Chart, abs : bool = false)
 
     CalculateDatapoints(&week)
 
+    week.labelStart = -300
+    week.labelIncrement = 50
+
     return week
 }
 
-// Difference between close of each half hour candle, and the open of the first candle of the day or week
+// Percentage difference between close of each half hour candle, and the open of the first candle of the day or week
 HalfHourCandleWeek_CloseOffset :: proc(chart : main.Chart, sampleWeek : bool = false) -> HalfHourCandleWeek
 {
     using main
@@ -110,19 +118,22 @@ HalfHourCandleWeek_CloseOffset :: proc(chart : main.Chart, sampleWeek : bool = f
                 candleIndex := weekIndex + day * 48 + dataIndex
                 if sampleWeek
                 {
-                    append(&week.data[day][dataIndex].values, candles[candleIndex].close - candles[weekIndex].open)
-                    week.data[day][dataIndex].mean += candles[candleIndex].close - candles[weekIndex].open
+                    append(&week.data[day][dataIndex].values, candles[candleIndex].close / candles[weekIndex].open)
+                    week.data[day][dataIndex].mean += candles[candleIndex].close / candles[weekIndex].open
                 }
                 else
                 {
-                    append(&week.data[day][dataIndex].values, candles[candleIndex].close - candles[weekIndex + day * 48].open)
-                    week.data[day][dataIndex].mean += candles[candleIndex].close - candles[weekIndex + day * 48].open
+                    append(&week.data[day][dataIndex].values, candles[candleIndex].close / candles[weekIndex + day * 48].open)
+                    week.data[day][dataIndex].mean += candles[candleIndex].close / candles[weekIndex + day * 48].open
                 }
             }
         }
     }
 
     CalculateDatapoints(&week)
+
+    week.labelStart = 0.95
+    week.labelIncrement = 0.005
 
     return week
 }
@@ -152,52 +163,61 @@ HalfHourCandleWeek_Range :: proc(chart : main.Chart) -> HalfHourCandleWeek
 
     CalculateDatapoints(&week)
 
+    week.labelStart = 50
+    week.labelIncrement = 50
+
     return week
 }
 
-// WIP
 // Difference between high of each half hour candle, and the average price of the week
-//HalfHourCandleWeek_High :: proc(chart : main.Chart) -> HalfHourCandleWeek
-//{
-//    using main
-//
-//    week : HalfHourCandleWeek
-//
-//    candlesStartIndex := CandleList_TimestampToIndex(chart.candles[Timeframe.MINUTE_30], APR_1ST_2020)
-//    candles := chart.candles[Timeframe.MINUTE_30].candles[candlesStartIndex:]
-//
-//    weekAverages : [dynamic]f32
-//
-//    for weekIndex := 0; weekIndex < len(candles) / (48 * 7) - 1; weekIndex += 1
-//    {
-//        for dataIndex in 0 ..< 48 * 7
-//        {
-//            weekAverages[weekIndex] += candles[weekIndex * 48 * 7 + dataIndex]
-//        }
-//
-//        weekAverages[weekIndex] /= 48 * 7
-//    }
-//
-//    for day in 0 ..< 7
-//    {
-//        for weekIndex := 0; weekIndex < len(candles) - 48 * 7; weekIndex += 48 * 7
-//        {
-//            for dataIndex in 0 ..< 48
-//            {
-//                candleIndex := weekIndex + day * 48 + dataIndex
-//                append(&week.data[day][dataIndex].values, candles[candleIndex].close - candles[weekIndex].open)
-//                week.data[day][dataIndex].mean += candles[candleIndex].close - candles[weekIndex].open
-//            }
-//        }
-//    }
-//
-//    CalculateDatapoints(&week)
-//
-//    return week
-//}
+HalfHourCandleWeek_High :: proc(chart : main.Chart) -> HalfHourCandleWeek
+{
+    using main
+
+    week : HalfHourCandleWeek
+
+    candlesStartIndex := CandleList_TimestampToIndex(chart.candles[Timeframe.MINUTE_30], APR_1ST_2020)
+    candles := chart.candles[Timeframe.MINUTE_30].candles[candlesStartIndex:]
+    weeks := chart.candles[Timeframe.WEEK].candles[:]
+
+    vwaps : [dynamic]f32
+
+    for weekIndex in CandleList_TimestampToIndex(chart.candles[Timeframe.WEEK], APR_1ST_2020) ..< i32(len(weeks))
+    {
+        startTimestamp := CandleList_IndexToTimestamp(chart.candles[Timeframe.WEEK], weekIndex)
+        endTimestamp := CandleList_IndexToTimestamp(chart.candles[Timeframe.WEEK], weekIndex + 1)
+
+        profile := VolumeProfile_Create(startTimestamp, endTimestamp, weeks[weekIndex].high, weeks[weekIndex].low, chart, 25)
+        defer VolumeProfile_Destroy(profile)
+
+        append(&vwaps, f32(profile.pocIndex) * profile.bucketSize + profile.bottomPrice)
+    }
+
+    for day in 0 ..< 7
+    {
+        for weekIndex := 0; weekIndex < len(candles) - 48 * 7; weekIndex += 48 * 7
+        {
+            for dataIndex in 0 ..< 48
+            {
+                candleIndex := weekIndex + day * 48 + dataIndex
+                append(&week.data[day][dataIndex].values, candles[candleIndex].high / vwaps[weekIndex / (48 * 7)])
+                week.data[day][dataIndex].mean += candles[candleIndex].high / vwaps[weekIndex / (48 * 7)]
+            }
+        }
+    }
+
+    CalculateDatapoints(&week)
+
+    week.labelStart = 0.95
+    week.labelIncrement = 0.005
+
+    return week
+}
 
 CalculateDatapoints :: proc(week : ^HalfHourCandleWeek)
 {
+    week.lowestValue = 100000
+
     for day in 0 ..< 7
     {
         for dataIndex in 0 ..< 48
@@ -213,7 +233,6 @@ CalculateDatapoints :: proc(week : ^HalfHourCandleWeek)
             week.highestValue = math.max(week.highestValue, week.data[day][dataIndex].mean)
             week.highestValue = math.max(week.highestValue, week.data[day][dataIndex].Q3)
 
-            // Won't go below 0, which I don't mind
             week.lowestValue = math.min(week.lowestValue, week.data[day][dataIndex].mean)
             week.lowestValue = math.min(week.lowestValue, week.data[day][dataIndex].Q1)
         }

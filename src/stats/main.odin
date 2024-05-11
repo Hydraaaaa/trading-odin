@@ -98,7 +98,7 @@ main :: proc()
 
 			range := week.highestValue - week.lowestValue
 
-			labelValue := 50
+			labelValue := week.labelStart
 
 			labelHeight := (1 - ((f32(labelValue) - week.lowestValue) / range)) * SCREEN_HEIGHT
 
@@ -113,7 +113,7 @@ main :: proc()
 				lineColor.a = 127
 				DrawLine(i32(chartOffset), i32(labelHeight), SCREEN_WIDTH, i32(labelHeight), lineColor)
 
-				labelValue += 50
+				labelValue += week.labelIncrement
 				labelHeight = (1 - ((f32(labelValue) - week.lowestValue) / range)) * SCREEN_HEIGHT
 			}
 		}
