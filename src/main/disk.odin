@@ -344,6 +344,7 @@ AppendDay :: proc(trades : ^[]Trade, chart : ^Chart)
 	   len(chart.candles[Timeframe.WEEK].candles) == 0
 	{
 		append(&chart.candles[Timeframe.WEEK].candles, newDayCandle)
+		append(&chart.weeklyVolumeProfiles, VolumeProfile{})
 	}
 	else
 	{
