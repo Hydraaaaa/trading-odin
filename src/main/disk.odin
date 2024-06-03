@@ -6,10 +6,10 @@ import "core:os"
 import "core:mem"
 import "core:math"
 
-TRADES_FILE :: "trades.bin"
-MINUTE_CANDLES_FILE :: "minutecandles.bin"
-HOUR_VOLUME_PROFILE_HEADER_FILE :: "hourvolumeprofileheaders.bin"
-HOUR_VOLUME_PROFILE_BUCKET_FILE :: "hourvolumeprofilebuckets.bin"
+TRADES_FILE :: "data/trades.bin"
+MINUTE_CANDLES_FILE :: "data/minutecandles.bin"
+HOUR_VOLUME_PROFILE_HEADER_FILE :: "data/hourvolumeprofileheaders.bin"
+HOUR_VOLUME_PROFILE_BUCKET_FILE :: "data/hourvolumeprofilebuckets.bin"
 HOUR_BUCKET_SIZE :: 5
 
 LoadDateToDownload :: proc() -> DayMonthYear

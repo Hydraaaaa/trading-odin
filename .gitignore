@@ -1,10 +1,7 @@
 /.vim
 /src/.bin
 .vscode/tasks.json
-minutecandles.bin
-trades.bin
-hourvolumeprofilebuckets.bin
-hourvolumeprofileheaders.bin
 *.exe
 *.pdb
 ols.json
+data
