@@ -39,7 +39,8 @@ VolumeProfileBucket :: struct
     buyVolume : f32,
 }
 
-// Around 1000x faster if bucketSize is a multiple of provided pool's bucketSize
+// Around 1000x faster if bucketSize is a multiple of provided pool's bucketSize  
+// Must be freed with VolumeProfile_Destroy
 VolumeProfile_Create :: proc(startTimestamp : i32, endTimestamp : i32, high : f32, low : f32, chart : Chart, bucketSize : f32 = 5) -> VolumeProfile
 {
     if bucketSize <= 0
@@ -61,6 +62,16 @@ VolumeProfile_Create :: proc(startTimestamp : i32, endTimestamp : i32, high : f3
         return VolumeProfile_CreateFromTrades(trades[:], high, low, bucketSize)
     }
 
+    profile := VolumeProfile_CreateInternal(startTimestamp, endTimestamp, high, low, chart, bucketSize)
+
+    VolumeProfile_Finalize(&profile)
+
+    return profile
+}
+
+@(private)
+VolumeProfile_CreateInternal :: proc(startTimestamp : i32, endTimestamp : i32, high : f32, low : f32, chart : Chart, bucketSize : f32) -> VolumeProfile
+{
     profile : VolumeProfile
 
     profile.bottomPrice = low - math.mod(low, bucketSize)
@@ -161,11 +172,10 @@ VolumeProfile_Create :: proc(startTimestamp : i32, endTimestamp : i32, high : f3
         }
     }
 
-    VolumeProfile_Finalize(&profile)
-
     return profile
 }
 
+// Must be freed with VolumeProfile_Destroy
 VolumeProfile_CreateFromTrades :: proc(trades : []Trade, high : f32, low : f32, bucketSize : f32 = 5) -> VolumeProfile
 {
     profile : VolumeProfile
@@ -199,6 +209,8 @@ VolumeProfile_CreateFromTrades :: proc(trades : []Trade, high : f32, low : f32, 
     return profile
 }
 
+// Creates a volume profile using only the data available from the provided candles  
+// Must be freed with VolumeProfile_Destroy
 VolumeProfile_CreateFromCandles :: proc(candles : []Candle, high : f32, low : f32, bucketSize : f32 = 5) -> VolumeProfile
 {
     profile : VolumeProfile
@@ -249,6 +261,107 @@ VolumeProfile_CreateFromCandles :: proc(candles : []Candle, high : f32, low : f3
     VolumeProfile_Finalize(&profile)
 
     return profile
+}
+
+// Leverage an existing volume profile to avoid recalculating its range
+VolumeProfile_Resize :: proc(profile : ^VolumeProfile, oldStartTimestamp : i32, oldEndTimestamp : i32, newStartTimestamp : i32, newEndTimestamp : i32, oldHigh : f32, oldLow : f32, newHigh : f32, newLow : f32, chart : Chart)
+{
+    // If the new region doesn't overlap the old region, regenerate
+    // If the new region is less than half the size of the old region, regenerate (less work than shrinking)
+    if newStartTimestamp > oldEndTimestamp ||
+       newEndTimestamp < oldStartTimestamp ||
+       newEndTimestamp - newStartTimestamp / 2 < oldEndTimestamp - oldStartTimestamp
+    {
+        profile^ = VolumeProfile_Create(newStartTimestamp, newEndTimestamp, newHigh, newLow, chart, profile.bucketSize)
+        return
+    }
+
+    // TODO: Determine if more than half of the current profile is being used in the new profile
+    // If not, generate a new profile
+
+    newBottomPrice := newLow - math.mod(newLow, profile.bucketSize)
+    newTopPrice := newHigh - math.mod(newHigh, profile.bucketSize) + profile.bucketSize
+
+    newBuckets := make([]VolumeProfileBucket, int((newTopPrice - newBottomPrice) / profile.bucketSize))
+
+    indexOffset := int((profile.bottomPrice - newBottomPrice) / profile.bucketSize)
+
+    startIndex := math.max(indexOffset, 0)
+    endIndex := math.min(indexOffset + len(profile.buckets), len(newBuckets))
+
+    // Copy old data to new range
+    for i in startIndex ..< endIndex
+    {
+        newBuckets[i] = profile.buckets[i - indexOffset]
+    }
+
+    // Add prepended data to profile
+    if newStartTimestamp < oldStartTimestamp
+    {
+        beforeProfile := VolumeProfile_CreateInternal(newStartTimestamp, oldStartTimestamp, newHigh, newLow, chart, profile.bucketSize)
+        defer VolumeProfile_Destroy(beforeProfile)
+
+        for bucket, i in beforeProfile.buckets
+        {
+            newBuckets[i].buyVolume += bucket.buyVolume
+            newBuckets[i].sellVolume += bucket.sellVolume
+        }
+    }
+    else if newStartTimestamp > oldStartTimestamp
+    {
+        // Shrink the profile by subtracting
+        beforeProfile := VolumeProfile_CreateInternal(oldStartTimestamp, newStartTimestamp, oldHigh, oldLow, chart, profile.bucketSize)
+        defer VolumeProfile_Destroy(beforeProfile)
+
+        indexOffset := int((beforeProfile.bottomPrice - newBottomPrice) / beforeProfile.bucketSize)
+
+        startIndex := math.max(indexOffset, 0)
+        endIndex := math.min(indexOffset + len(profile.buckets), len(newBuckets))
+
+        // Copy old data to new range
+        for i in startIndex ..< endIndex
+        {
+            newBuckets[i].buyVolume -= beforeProfile.buckets[i - indexOffset].buyVolume
+            newBuckets[i].sellVolume -= beforeProfile.buckets[i - indexOffset].sellVolume
+        }
+    }
+
+    // Add appended data to profile
+    if newEndTimestamp > oldEndTimestamp
+    {
+        afterProfile := VolumeProfile_CreateInternal(oldEndTimestamp, newEndTimestamp, newHigh, newLow, chart, profile.bucketSize)
+        defer VolumeProfile_Destroy(afterProfile)
+
+        for bucket, i in afterProfile.buckets
+        {
+            newBuckets[i].buyVolume += bucket.buyVolume
+            newBuckets[i].sellVolume += bucket.sellVolume
+        }
+    }
+    else if newEndTimestamp < oldEndTimestamp
+    {
+        // Shrink the profile by subtracting
+        beforeProfile := VolumeProfile_CreateInternal(newEndTimestamp, oldEndTimestamp, oldHigh, oldLow, chart, profile.bucketSize)
+        defer VolumeProfile_Destroy(beforeProfile)
+
+        indexOffset := int((beforeProfile.bottomPrice - newBottomPrice) / beforeProfile.bucketSize)
+
+        startIndex := math.max(indexOffset, 0)
+        endIndex := math.min(indexOffset + len(profile.buckets), len(newBuckets))
+
+        // Copy old data to new range
+        for i in startIndex ..< endIndex
+        {
+            newBuckets[i].buyVolume -= beforeProfile.buckets[i - indexOffset].buyVolume
+            newBuckets[i].sellVolume -= beforeProfile.buckets[i - indexOffset].sellVolume
+        }
+    }
+
+    delete(profile.buckets)
+    profile.bottomPrice = newBottomPrice
+    profile.buckets = newBuckets
+
+    VolumeProfile_Finalize(profile)
 }
 
 @(private)

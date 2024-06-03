@@ -138,6 +138,8 @@ main :: proc()
 	rulerProfile : VolumeProfile
 	rulerStartTimestamp : i32
 	rulerEndTimestamp : i32
+	rulerHigh : f32
+	rulerLow : f32
 	defer VolumeProfile_Destroy(rulerProfile)
 
 	// Set initial camera X position to show the most recent candle on the right
@@ -286,24 +288,22 @@ main :: proc()
 
 		if draggingRuler
 		{
+			newStartTimestamp : i32
+			newEndTimestamp : i32
+
 			if CandleList_IndexToTimestamp(chart.candles[dragStartZoomIndex], dragStartCandleIndex) > CandleList_IndexToTimestamp(chart.candles[zoomIndex], cursorCandleIndex)
 			{
-				rulerStartTimestamp = CandleList_IndexToTimestamp(chart.candles[zoomIndex], cursorCandleIndex)
-				rulerEndTimestamp = CandleList_IndexToTimestamp(chart.candles[dragStartZoomIndex], dragStartCandleIndex + 1)
+				newStartTimestamp = CandleList_IndexToTimestamp(chart.candles[zoomIndex], cursorCandleIndex)
+				newEndTimestamp = CandleList_IndexToTimestamp(chart.candles[dragStartZoomIndex], dragStartCandleIndex + 1)
 			}
 			else
 			{
-				rulerStartTimestamp = CandleList_IndexToTimestamp(chart.candles[dragStartZoomIndex], dragStartCandleIndex)
-				rulerEndTimestamp = CandleList_IndexToTimestamp(chart.candles[zoomIndex], cursorCandleIndex + 1)
+				newStartTimestamp = CandleList_IndexToTimestamp(chart.candles[dragStartZoomIndex], dragStartCandleIndex)
+				newEndTimestamp = CandleList_IndexToTimestamp(chart.candles[zoomIndex], cursorCandleIndex + 1)
 			}
 
 			if GetMouseDelta().x != 0
 			{
-				if rulerProfile.bucketSize != 0
-				{
-					VolumeProfile_Destroy(rulerProfile)
-				}
-
 				rulerZoomIndex : Timeframe
 
 				if dragStartZoomIndex > zoomIndex
@@ -315,12 +315,24 @@ main :: proc()
 					rulerZoomIndex = dragStartZoomIndex
 				}
 
-				startIndex := CandleList_TimestampToIndex(chart.candles[rulerZoomIndex], rulerStartTimestamp)
-				endIndex := CandleList_TimestampToIndex(chart.candles[rulerZoomIndex], rulerEndTimestamp)
+				startIndex := CandleList_TimestampToIndex(chart.candles[rulerZoomIndex], newStartTimestamp)
+				endIndex := CandleList_TimestampToIndex(chart.candles[rulerZoomIndex], newEndTimestamp)
 				highCandle, _ := Candle_HighestHigh(chart.candles[rulerZoomIndex].candles[startIndex:endIndex])
 				lowCandle, _ := Candle_LowestLow(chart.candles[rulerZoomIndex].candles[startIndex:endIndex])
 
-				rulerProfile = VolumeProfile_Create(rulerStartTimestamp, rulerEndTimestamp, highCandle.high, lowCandle.low, chart, 25)
+				if rulerProfile.bucketSize == 0
+				{
+					rulerProfile = VolumeProfile_Create(newStartTimestamp, newEndTimestamp, highCandle.high, lowCandle.low, chart, 25)
+				}
+				else
+				{
+					VolumeProfile_Resize(&rulerProfile, rulerStartTimestamp, rulerEndTimestamp, newStartTimestamp, newEndTimestamp, rulerHigh, rulerLow, highCandle.high, lowCandle.low, chart)
+				}
+
+				rulerStartTimestamp = newStartTimestamp
+				rulerEndTimestamp = newEndTimestamp
+				rulerHigh = highCandle.high
+				rulerLow = lowCandle.low
 			}
 		}
 
