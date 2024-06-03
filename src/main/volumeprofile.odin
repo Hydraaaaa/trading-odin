@@ -496,3 +496,15 @@ VolumeProfile_Destroy :: proc(profile : VolumeProfile)
         delete(profile.buckets)
     }
 }
+
+VolumeProfile_BucketToPrice :: proc(profile : VolumeProfile, index : int, roundDown : bool = false) -> f32
+{
+    if roundDown
+    {
+        return profile.bottomPrice + f32(index) * profile.bucketSize
+    }
+    else
+    {
+        return profile.bottomPrice + f32(index) * profile.bucketSize + profile.bucketSize / 2
+    }
+}
