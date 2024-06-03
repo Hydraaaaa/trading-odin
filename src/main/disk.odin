@@ -56,10 +56,7 @@ LoadMinuteCandles :: proc() -> [dynamic]Candle
 
 		candles := make([dynamic]Candle, 0, len(fileCandles) + 1440)
 
-		for candle in fileCandles
-		{
-			append(&candles, candle)
-		}
+		non_zero_append(&candles, ..fileCandles)
 
 		return candles
 	}
