@@ -84,14 +84,14 @@ main :: proc()
 		chart.candles[Timeframe.MONTH].timeframe = Timeframe.MONTH
 	}
 
+	chart.hourVolumeProfilePool = LoadHourVolumeProfiles()
+
 	// Time is UTC, which matches Bybit's historical data upload time
 	currentDate := Timestamp_ToDayMonthYear(i32(time.now()._nsec / i64(time.Second)) - TIMESTAMP_2010)
 
 	downloadThread : ^thread.Thread
 	downloadedTrades : []Trade
 	downloading := false
-
-	chart.hourVolumeProfilePool = LoadHourVolumeProfiles()
 
 	if chart.dateToDownload != currentDate
 	{
