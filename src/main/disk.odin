@@ -8,6 +8,7 @@ import "core:math"
 
 TRADES_FILE :: "data/trades.bin"
 MINUTE_CANDLES_FILE :: "data/minutecandles.bin"
+MINUTE_DELTA_FILE :: "data/minutedelta.bin"
 HOUR_VOLUME_PROFILE_HEADER_FILE :: "data/hourvolumeprofileheaders.bin"
 HOUR_VOLUME_PROFILE_BUCKET_FILE :: "data/hourvolumeprofilebuckets.bin"
 HOUR_BUCKET_SIZE :: 5
@@ -62,6 +63,30 @@ LoadMinuteCandles :: proc() -> [dynamic]Candle
 	}
 }
 
+// Allocates delta
+LoadMinuteDelta :: proc() -> [dynamic]f64
+{
+	if !os.is_file(MINUTE_DELTA_FILE)
+	{
+		deltaFile, err := os.open(MINUTE_DELTA_FILE, os.O_CREATE); assert(err == 0, "os.open error")
+		os.close(deltaFile)
+
+		return make([dynamic]f64, 0, 1440)
+	}
+	else
+	{
+		bytes, success := os.read_entire_file_from_filename(MINUTE_DELTA_FILE); assert(success, "os.read_entire_file_from_filename error")
+
+		fileDelta := slice.reinterpret([]f64, bytes)
+
+		delta := make([dynamic]f64, 0, len(fileDelta) + 1440)
+
+		non_zero_append(&delta, ..fileDelta)
+
+		return delta
+	}
+}
+
 // Appends new day's trades both in memory, and on disk
 // Deletes trades upon completion
 // Increments date
@@ -100,7 +125,8 @@ AppendDay :: proc(trades : ^[]Trade, chart : ^Chart)
 
 	os.close(tradesFile)
 
-	// Convert trades to minute candles ><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
+	// Convert trades to minute information ><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
+	// Also create some intermediary data for hourly volume profiles later
 
 	currentCandleTimestamp : i32 = ---
 
@@ -109,6 +135,8 @@ AppendDay :: proc(trades : ^[]Trade, chart : ^Chart)
 	hourHighs : [24]f32
 	hourLows : [24]f32
 	startHour : int = ---
+
+	delta : f64 = 0
 
 	if chart.dateToDownload == BYBIT_ORIGIN_DATE
 	{
@@ -123,6 +151,7 @@ AppendDay :: proc(trades : ^[]Trade, chart : ^Chart)
 	{
 		currentCandleTimestamp = DayMonthYear_ToTimestamp(chart.dateToDownload)
 		startHour = 0
+		delta = chart.candles[Timeframe.MINUTE].cumulativeDelta[len(chart.candles[Timeframe.MINUTE].cumulativeDelta) - 1]
 	}
 
 	candle : Candle
@@ -146,6 +175,7 @@ AppendDay :: proc(trades : ^[]Trade, chart : ^Chart)
 	candleStartIndex := len(chart.candles[Timeframe.MINUTE].candles)
 
 	non_zero_resize(&chart.candles[Timeframe.MINUTE].candles, len(chart.candles[Timeframe.MINUTE].candles) + candlesToAdd)
+	non_zero_resize(&chart.candles[Timeframe.MINUTE].cumulativeDelta, len(chart.candles[Timeframe.MINUTE].cumulativeDelta) + candlesToAdd)
 
 	for trade, i in trades
 	{
@@ -155,6 +185,7 @@ AppendDay :: proc(trades : ^[]Trade, chart : ^Chart)
 		{
 			currentCandleTimestamp += 60
 			chart.candles[Timeframe.MINUTE].candles[candleStartIndex + candlesAdded] = candle
+			chart.candles[Timeframe.MINUTE].cumulativeDelta[candleStartIndex + candlesAdded] = delta
 			candlesAdded += 1
 
 			for candlesAdded / 60 + startHour > currentHour
@@ -180,6 +211,8 @@ AppendDay :: proc(trades : ^[]Trade, chart : ^Chart)
 		candle.close = trade.price
 
 		candle.volume += trade.volume
+
+		delta += f64(trade.volume) * f64(int(trade.isBuy)) - f64(trade.volume) * f64(int(!trade.isBuy))
 	}
 
 	// Close final candle
@@ -189,6 +222,7 @@ AppendDay :: proc(trades : ^[]Trade, chart : ^Chart)
 	{
 		currentCandleTimestamp += 60
 		chart.candles[Timeframe.MINUTE].candles[candleStartIndex + candlesAdded] = candle
+		chart.candles[Timeframe.MINUTE].cumulativeDelta[candleStartIndex + candlesAdded] = delta
 		candlesAdded += 1
 
 		for candlesAdded / 60 + startHour > currentHour
@@ -209,7 +243,7 @@ AppendDay :: proc(trades : ^[]Trade, chart : ^Chart)
 		hourEndIndices[currentHour] = len(trades) - 1
 	}
 
-	// Append to minute candles file <><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
+	// Append to minute files ><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
 
 	if candlesAdded != candlesToAdd
 	{
@@ -224,6 +258,14 @@ AppendDay :: proc(trades : ^[]Trade, chart : ^Chart)
 	_, err = os.write(candlesFile, slice.to_bytes(chart.candles[Timeframe.MINUTE].candles[candleStartIndex:])); assert(err == 0, "os.write error")
 
 	os.close(candlesFile)
+
+	deltaFile : os.Handle
+	deltaFile, err = os.open(MINUTE_DELTA_FILE, os.O_RDWR); assert(err == 0, "os.open error")
+
+	_, err = os.seek(deltaFile, 0, os.SEEK_END); assert(err == 0, "os.seek error")
+	_, err = os.write(deltaFile, slice.to_bytes(chart.candles[Timeframe.MINUTE].cumulativeDelta[candleStartIndex:])); assert(err == 0, "os.write error")
+
+	os.close(deltaFile)
 
 	// Append to hour volume profiles file <><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
 	profileHeaderFile : os.Handle
@@ -293,6 +335,7 @@ AppendDay :: proc(trades : ^[]Trade, chart : ^Chart)
 	candleTimeframeIncrements := CANDLE_TIMEFRAME_INCREMENTS
 
 	prevTimeframeCandles := chart.candles[Timeframe.MINUTE].candles[candleStartIndex:]
+	prevDelta := chart.candles[Timeframe.MINUTE].cumulativeDelta[candleStartIndex:]
 
 	for timeframe in Timeframe.MINUTE_5 ..= Timeframe.DAY
 	{
@@ -326,6 +369,7 @@ AppendDay :: proc(trades : ^[]Trade, chart : ^Chart)
 		for end <= prevTimeframeCandlesLen
 		{
 			append(&chart.candles[timeframe].candles, Candle_Merge(..prevTimeframeCandles[start:end]))
+            append(&chart.candles[timeframe].cumulativeDelta, prevDelta[end - 1])
 
 			start = end
 			end += timeframeDivisor
@@ -333,31 +377,37 @@ AppendDay :: proc(trades : ^[]Trade, chart : ^Chart)
 
 		prevTimeframe = timeframe
 		prevTimeframeCandles = chart.candles[timeframe].candles[startingCandlesLen:]
+		prevDelta = chart.candles[timeframe].cumulativeDelta[startingCandlesLen:]
 	}
 
 	newDayCandle := slice.last(chart.candles[Timeframe.DAY].candles[:])
+	newDelta := slice.last(chart.candles[Timeframe.DAY].cumulativeDelta[:])
 
 	if Timestamp_ToDayOfWeek(DayMonthYear_ToTimestamp(chart.dateToDownload)) == .MONDAY ||
 	   len(chart.candles[Timeframe.WEEK].candles) == 0
 	{
 		append(&chart.candles[Timeframe.WEEK].candles, newDayCandle)
+		append(&chart.candles[Timeframe.WEEK].cumulativeDelta, newDelta)
 		append(&chart.weeklyVolumeProfiles, VolumeProfile{})
 	}
 	else
 	{
 		weekCandleIndex := len(chart.candles[Timeframe.WEEK].candles) - 1
 		chart.candles[Timeframe.WEEK].candles[weekCandleIndex] = Candle_Merge(chart.candles[Timeframe.WEEK].candles[weekCandleIndex], newDayCandle)
+		chart.candles[Timeframe.WEEK].cumulativeDelta[weekCandleIndex] = newDelta
 	}
 
 	if chart.dateToDownload.day == 1 ||
 	   len(chart.candles[Timeframe.MONTH].candles) == 0
 	{
 		append(&chart.candles[Timeframe.MONTH].candles, newDayCandle)
+		append(&chart.candles[Timeframe.MONTH].cumulativeDelta, newDelta)
 	}
 	else
 	{
 		monthCandleIndex := len(chart.candles[Timeframe.MONTH].candles) - 1
 		chart.candles[Timeframe.MONTH].candles[monthCandleIndex] = Candle_Merge(chart.candles[Timeframe.MONTH].candles[monthCandleIndex], newDayCandle)
+		chart.candles[Timeframe.MONTH].cumulativeDelta[monthCandleIndex] = newDelta
 	}
 
 	delete(trades^)

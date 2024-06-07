@@ -5,6 +5,7 @@ import "core:fmt"
 CandleList :: struct
 {
 	candles : [dynamic]Candle,
+	cumulativeDelta : [dynamic]f64,
 	offset : i32,
 	timeframe : Timeframe,
 }

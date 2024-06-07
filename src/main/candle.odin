@@ -55,6 +55,50 @@ Candle_LowestLow :: proc(candles : []Candle) -> (Candle, i32)
 	return lowestCandle, lowestCandleIndex
 }
 
+Candle_HighestClose :: proc(candles : []Candle) -> (Candle, i32)
+{
+	if len(candles) == 0
+	{
+		return {}, 0
+	}
+
+	highestCandle := candles[0]
+	highestCandleIndex : i32 = 0
+
+	for candle, i in candles[1:]
+	{
+		if candle.close > highestCandle.close
+		{
+			highestCandle = candle
+			highestCandleIndex = i32(i) + 1
+		}
+	}
+
+	return highestCandle, highestCandleIndex
+}
+
+Candle_LowestClose :: proc(candles : []Candle) -> (Candle, i32)
+{
+	if len(candles) == 0
+	{
+		return {}, 0
+	}
+
+	lowestCandle := candles[0]
+	lowestCandleIndex : i32 = 0
+
+	for candle, i in candles[1:]
+	{
+		if candle.close < lowestCandle.close
+		{
+			lowestCandle = candle
+			lowestCandleIndex = i32(i) + 1
+		}
+	}
+
+	return lowestCandle, lowestCandleIndex
+}
+
 Candle_FloorTimestamp :: proc(timestamp : i32, timeframe : Timeframe) -> i32
 {
 	timeframeIncrements := CANDLE_TIMEFRAME_INCREMENTS

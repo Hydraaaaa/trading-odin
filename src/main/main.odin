@@ -56,6 +56,7 @@ main :: proc()
 
 	chart.candles[Timeframe.MINUTE].offset = BYBIT_ORIGIN_MINUTE_TIMESTAMP
 	chart.candles[Timeframe.MINUTE].candles = LoadMinuteCandles()
+	chart.candles[Timeframe.MINUTE].cumulativeDelta = LoadMinuteDelta()
 	defer delete(chart.candles[Timeframe.MINUTE].candles)
 
 	// Init chart.candles offsets and timeframes
@@ -141,6 +142,12 @@ main :: proc()
 	rulerHigh : f32
 	rulerLow : f32
 	defer VolumeProfile_Destroy(rulerProfile)
+
+	drawCVD := true
+	drawDayOfWeek := false
+	drawSessions := true
+	drawPreviousDayVolumeProfiles := true
+	drawPreviousWeekVolumeProfiles := false
 
 	// Set initial camera X position to show the most recent candle on the right
 	{
@@ -497,7 +504,13 @@ main :: proc()
 			cameraPosY = Price_ToPixelY(priceUpper, scaleData) - pixelOffset
 		}
 
-		// Rendering <><><><><><><><><><><><><><><><><><><><><><><><><><><><>
+		if IsKeyPressed(.C) { drawCVD = !drawCVD }
+		if IsKeyPressed(.M) { drawDayOfWeek = !drawDayOfWeek }
+		if IsKeyPressed(.S) { drawSessions = !drawSessions }
+		if IsKeyPressed(.D) { drawPreviousDayVolumeProfiles = !drawPreviousDayVolumeProfiles }
+		if IsKeyPressed(.W) { drawPreviousWeekVolumeProfiles = !drawPreviousWeekVolumeProfiles }
+
+		// Rendering ><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
 
         BeginDrawing()
 
@@ -951,7 +964,8 @@ main :: proc()
 		//}
 
 		// Draw days of week
-		if zoomIndex <= .DAY
+		if drawDayOfWeek &&
+		   zoomIndex <= .DAY
 		{
 			// Convert current visible indices into visible day indices
 			startIndex := CandleList_TimestampToIndex(chart.candles[Timeframe.DAY], CandleList_IndexToTimestamp(chart.candles[zoomIndex], visibleCandlesStartIndex))
@@ -968,6 +982,38 @@ main :: proc()
 				dayOfWeek := Timestamp_ToDayOfWeek(CandleList_IndexToTimestamp(chart.candles[Timeframe.DAY], i32(i)))
 
 				DrawRectangle(startPixel - cameraPosX, 0, endPixel - startPixel, screenHeight, colors[dayOfWeek])
+			}
+		}
+
+		// Draw sessions
+		if drawSessions &&
+		   zoomIndex <= .MINUTE_30
+		{
+			// Convert current visible indices to visible day indices - 1
+			startIndex := CandleList_TimestampToIndex(chart.candles[Timeframe.DAY], CandleList_IndexToTimestamp(chart.candles[zoomIndex], visibleCandlesStartIndex))
+			endIndex := CandleList_TimestampToIndex(chart.candles[Timeframe.DAY], CandleList_IndexToTimestamp(chart.candles[zoomIndex], visibleCandlesStartIndex + i32(len(visibleCandles)))) + 1
+
+			asia := RED
+			asia.a = 31
+			london := YELLOW
+			london.a = 31
+			newYork := BLUE
+			newYork.a = 31
+
+			for i in startIndex ..< endIndex
+			{
+				startTimestamp := CandleList_IndexToTimestamp(chart.candles[Timeframe.DAY], i32(i))
+				asiaStart := Timestamp_ToPixelX(startTimestamp, scaleData)
+				asiaLength := Timestamp_ToPixelX(1800 * 16, scaleData)
+				londonStart := asiaStart + asiaLength
+				londonLength := Timestamp_ToPixelX(1800 * 16, scaleData)
+				newYorkStart := Timestamp_ToPixelX(startTimestamp + 1800 * 27, scaleData)
+				newYorkLength := Timestamp_ToPixelX(1800 * 13, scaleData)
+				endTimestamp := startTimestamp + 10800
+
+				DrawRectangle(asiaStart - cameraPosX, 0, asiaLength, screenHeight, asia)
+				DrawRectangle(londonStart - cameraPosX, 0, londonLength, screenHeight, london)
+				DrawRectangle(newYorkStart - cameraPosX, 0, newYorkLength, screenHeight, newYork)
 			}
 		}
 
@@ -1057,7 +1103,8 @@ main :: proc()
 		}
 
 		// Draw previous week volume profiles
-		if zoomIndex <= .DAY
+		if drawPreviousWeekVolumeProfiles &&
+		   zoomIndex <= .DAY
 		{
 			// Convert current visible indices to visible week indices - 1
 			startIndex := CandleList_TimestampToIndex(chart.candles[Timeframe.WEEK], CandleList_IndexToTimestamp(chart.candles[zoomIndex], visibleCandlesStartIndex)) - 1
@@ -1083,7 +1130,8 @@ main :: proc()
 		}
 
 		// Draw previous day volume profiles
-		if zoomIndex <= .HOUR
+		if drawPreviousDayVolumeProfiles &&
+		   zoomIndex <= .HOUR
 		{
 			// Convert current visible indices to visible day indices - 1
 			startIndex := CandleList_TimestampToIndex(chart.candles[Timeframe.DAY], CandleList_IndexToTimestamp(chart.candles[zoomIndex], visibleCandlesStartIndex)) - 1
@@ -1105,6 +1153,51 @@ main :: proc()
 				endPixel := CandleList_IndexToPixelX(chart.candles[Timeframe.DAY], i32(i) + 2, scaleData)
 
 				DrawVolumeProfile(startPixel - cameraPosX, endPixel - startPixel, cameraPosY, chart.dailyVolumeProfiles[i], scaleData, 63, false, true, true, true, true)
+			}
+		}
+
+		// Draw CVD
+		if drawCVD
+		{
+			highestCloseCandle, highestCloseCandleIndex := Candle_HighestClose(visibleCandles)
+			lowestCloseCandle, lowestCloseCandleIndex := Candle_LowestClose(visibleCandles)
+
+			cvdHighPixel := Price_ToPixelY_f32(highestCloseCandle.close, scaleData) - f32(cameraPosY)
+			cvdLowPixel := Price_ToPixelY_f32(lowestCloseCandle.close, scaleData) - f32(cameraPosY)
+			cvdPixelRange := cvdHighPixel - cvdLowPixel
+
+			cvdHighDelta := chart.candles[zoomIndex].cumulativeDelta[highestCloseCandleIndex + visibleCandlesStartIndex]
+			cvdLowDelta := chart.candles[zoomIndex].cumulativeDelta[lowestCloseCandleIndex + visibleCandlesStartIndex]
+
+			// Prevents chart inverting when the high has less delta than the low
+			if cvdHighDelta < cvdLowDelta
+			{
+				swap := cvdHighDelta
+				cvdHighDelta = cvdLowDelta
+				cvdLowDelta = swap
+			}
+
+			cvdDeltaRange := cvdHighDelta - cvdLowDelta
+
+			visibleDeltas := chart.candles[zoomIndex].cumulativeDelta[visibleCandlesStartIndex:visibleCandlesStartIndex + i32(len(visibleCandles))]
+
+			highestCandleY := Price_ToPixelY(highestCloseCandle.close, scaleData) - cameraPosY
+			lowestCandleY := Price_ToPixelY(lowestCloseCandle.close, scaleData) - cameraPosY
+			DrawLine(0, highestCandleY, screenWidth, highestCandleY, Color{255, 255, 255, 95})
+			DrawLine(0, lowestCandleY, screenWidth, lowestCandleY, Color{255, 255, 255, 95})
+
+			prevX := CandleList_IndexToPixelX(chart.candles[zoomIndex], visibleCandlesStartIndex + 1, scaleData) - cameraPosX
+			prevY := i32(f32((visibleDeltas[0] - cvdLowDelta) / cvdDeltaRange) * cvdPixelRange + cvdLowPixel)
+
+			for delta, i in visibleDeltas[1:]
+			{
+				x := CandleList_IndexToPixelX(chart.candles[zoomIndex], visibleCandlesStartIndex + i32(i) + 2, scaleData) - cameraPosX
+				y := i32(f32((delta - cvdLowDelta) / cvdDeltaRange) * cvdPixelRange + cvdLowPixel)
+
+				DrawLine(prevX, prevY, x, y, Color{255, 255, 255, 191})
+
+				prevX = x
+				prevY = y
 			}
 		}
 

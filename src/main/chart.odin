@@ -23,6 +23,7 @@ Chart_CreateHTFCandles :: proc(chart : ^Chart)
     for timeframe in Timeframe.MINUTE_5 ..= Timeframe.WEEK
     {
         prevCandles := chart.candles[prevTimeframe].candles[:]
+        prevDelta := chart.candles[prevTimeframe].cumulativeDelta[:]
 
         prevCandlesLen := len(prevCandles)
 
@@ -30,6 +31,7 @@ Chart_CreateHTFCandles :: proc(chart : ^Chart)
 
         // + 1 accounts for a higher timeframe candle at the beginning with only partial data
         reserve(&chart.candles[timeframe].candles, prevCandlesLen / timeframeDivisor + 1)
+        reserve(&chart.candles[timeframe].cumulativeDelta, prevCandlesLen / timeframeDivisor + 1)
 
         // Separately calculate the subcandles of the first candle to handle the case where the candle timestamps aren't aligned
         firstCandleComponentCount := timeframeDivisor - int((chart.candles[prevTimeframe].offset - chart.candles[timeframe].offset) / candleTimeframeIncrements[prevTimeframe])
@@ -45,6 +47,7 @@ Chart_CreateHTFCandles :: proc(chart : ^Chart)
         for end <= prevCandlesLen
         {
             append(&chart.candles[timeframe].candles, Candle_Merge(..prevCandles[start:end]))
+            append(&chart.candles[timeframe].cumulativeDelta, prevDelta[end - 1])
 
             start = end
             end += timeframeDivisor
@@ -54,6 +57,7 @@ Chart_CreateHTFCandles :: proc(chart : ^Chart)
         if start < prevCandlesLen
         {
             append(&chart.candles[timeframe].candles, Candle_Merge(..prevCandles[start:prevCandlesLen]))
+            append(&chart.candles[timeframe].cumulativeDelta, prevDelta[prevCandlesLen - 1])
         }
 
         prevTimeframe = timeframe
@@ -76,6 +80,7 @@ Chart_CreateHTFCandles :: proc(chart : ^Chart)
 
     // Create candles
     dayCandles := chart.candles[Timeframe.DAY].candles[:]
+    dayDelta := chart.candles[Timeframe.DAY].cumulativeDelta[:]
 
     daysPerMonth := DAYS_PER_MONTH
 
@@ -98,6 +103,7 @@ Chart_CreateHTFCandles :: proc(chart : ^Chart)
     for end <= dayCandlesLen
     {
         append(&chart.candles[Timeframe.MONTH].candles, Candle_Merge(..dayCandles[start:end]))
+        append(&chart.candles[Timeframe.MONTH].cumulativeDelta, dayDelta[end - 1])
 
         start = end
 
@@ -115,5 +121,6 @@ Chart_CreateHTFCandles :: proc(chart : ^Chart)
     if start < dayCandlesLen
     {
         append(&chart.candles[Timeframe.MONTH].candles, Candle_Merge(..dayCandles[start:dayCandlesLen]))
+        append(&chart.candles[Timeframe.MONTH].cumulativeDelta, dayDelta[dayCandlesLen - 1])
     }
 }

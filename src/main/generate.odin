@@ -57,6 +57,38 @@ GenerateMinuteCandles :: proc()
 	os.write_entire_file(MINUTE_CANDLES_FILE, slice.to_bytes(candles[:]))
 }
 
+GenerateMinuteDelta :: proc()
+{
+    bytes, ok := os.read_entire_file_from_filename(TRADES_FILE)
+    defer delete(bytes)
+
+    trades := slice.reinterpret([]Trade, bytes[size_of(DayMonthYear):])
+
+    deltas : [dynamic]f64
+    reserve(&deltas, 4_194_304)
+
+    currentCandleTimestamp : i32 = BYBIT_ORIGIN_MINUTE_TIMESTAMP
+
+	delta : f64 = 0
+
+	for trade, i in trades[1:]
+	{
+		// This is a for instead of an if to handle cases where the next trade is more than a minute after the last trade
+		// Keep adding empty minutes until we're up to the minute of the trade
+		for trade.timestamp >= currentCandleTimestamp + 60
+		{
+			currentCandleTimestamp += 60
+			append(&deltas, delta)
+		}
+
+		delta += f64(trade.volume) * f64(int(trade.isBuy)) - f64(trade.volume) * f64(int(!trade.isBuy))
+	}
+
+    append(&deltas, delta)
+
+	os.write_entire_file(MINUTE_DELTA_FILE, slice.to_bytes(deltas[:]))
+}
+
 GenerateHourVolumeProfiles :: proc(hourlyCandles : CandleList)
 {
 	headerFile, err := os.open(HOUR_VOLUME_PROFILE_HEADER_FILE, os.O_CREATE); assert(err == 0, "os.open error")
