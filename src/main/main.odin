@@ -202,6 +202,9 @@ main :: proc()
 
 	scaleData.verticalScale = initialVerticalScale
 
+	cameraTopPrice : f32 = Price_FromPixelY(cameraPosY, scaleData)
+	cameraBottomPrice : f32 = Price_FromPixelY(cameraPosY + screenHeight, scaleData)
+
 	reserve(&chart.dailyVolumeProfiles, len(chart.candles[Timeframe.DAY].candles) + 7)
 	resize(&chart.dailyVolumeProfiles, len(chart.candles[Timeframe.DAY].candles))
 	reserve(&chart.weeklyVolumeProfiles, len(chart.candles[Timeframe.WEEK].candles) + 1)
@@ -441,6 +444,9 @@ main :: proc()
 		highestCandleIndex += visibleCandlesStartIndex
 		lowestCandleIndex += visibleCandlesStartIndex
 
+		cameraTopPrice = Price_FromPixelY(cameraPosY, scaleData)
+		cameraBottomPrice = Price_FromPixelY(cameraPosY + screenHeight, scaleData)
+
 		// If the last candle is before the start of the viewport
 		// Update candle under cursor
 		{
@@ -456,35 +462,18 @@ main :: proc()
 
 		if IsKeyPressed(.L)
 		{
-			cameraTop : f32 = Price_FromPixelY(cameraPosY, scaleData)
-			cameraBottom : f32 = Price_FromPixelY(cameraPosY + screenHeight, scaleData)
-
 			priceUpper : f32 = 0
 			priceLower : f32 = 10000000
 
 			// Rescale Candles
 			for candle in visibleCandles
 			{
-				if candle.high > priceUpper
-				{
-					priceUpper = candle.high
-				}
-
-				if candle.low < priceLower
-				{
-					priceLower = candle.low
-				}
+				priceUpper = math.max(priceUpper, candle.high)
+				priceLower = math.min(priceLower, candle.low)
 			}
 
-			if priceUpper > cameraTop
-			{
-				priceUpper = cameraTop
-			}
-
-			if priceLower < cameraBottom
-			{
-				priceLower = cameraBottom
-			}
+			priceUpper = math.min(priceUpper, cameraTopPrice)
+			priceLower = math.max(priceLower, cameraBottomPrice)
 
 			prePixelUpper : f32 = Price_ToPixelY_f32(priceUpper, scaleData)
 			prePixelLower : f32 = Price_ToPixelY_f32(priceLower, scaleData)
@@ -1159,40 +1148,39 @@ main :: proc()
 		// Draw CVD
 		if drawCVD
 		{
-			highestCloseCandle, highestCloseCandleIndex := Candle_HighestClose(visibleCandles)
-			lowestCloseCandle, lowestCloseCandleIndex := Candle_LowestClose(visibleCandles)
+			highestCloseCandle, _ := Candle_HighestClose(visibleCandles)
+			lowestCloseCandle, _ := Candle_LowestClose(visibleCandles)
 
-			cvdHighPixel := Price_ToPixelY_f32(highestCloseCandle.close, scaleData) - f32(cameraPosY)
-			cvdLowPixel := Price_ToPixelY_f32(lowestCloseCandle.close, scaleData) - f32(cameraPosY)
-			cvdPixelRange := cvdHighPixel - cvdLowPixel
-
-			cvdHighDelta := chart.candles[zoomIndex].cumulativeDelta[highestCloseCandleIndex + visibleCandlesStartIndex]
-			cvdLowDelta := chart.candles[zoomIndex].cumulativeDelta[lowestCloseCandleIndex + visibleCandlesStartIndex]
-
-			// Prevents chart inverting when the high has less delta than the low
-			if cvdHighDelta < cvdLowDelta
-			{
-				swap := cvdHighDelta
-				cvdHighDelta = cvdLowDelta
-				cvdLowDelta = swap
-			}
-
-			cvdDeltaRange := cvdHighDelta - cvdLowDelta
+			highestClose := math.min(highestCloseCandle.close, cameraTopPrice)
+			lowestClose := math.max(lowestCloseCandle.close, cameraBottomPrice)
 
 			visibleDeltas := chart.candles[zoomIndex].cumulativeDelta[visibleCandlesStartIndex:visibleCandlesStartIndex + i32(len(visibleCandles))]
 
-			highestCandleY := Price_ToPixelY(highestCloseCandle.close, scaleData) - cameraPosY
-			lowestCandleY := Price_ToPixelY(lowestCloseCandle.close, scaleData) - cameraPosY
-			DrawLine(0, highestCandleY, screenWidth, highestCandleY, Color{255, 255, 255, 95})
-			DrawLine(0, lowestCandleY, screenWidth, lowestCandleY, Color{255, 255, 255, 95})
+			highestPixel := Price_ToPixelY_f32(highestClose, scaleData) - f32(cameraPosY)
+			lowestPixel := Price_ToPixelY_f32(lowestClose, scaleData) - f32(cameraPosY)
+			pixelRange := highestPixel - lowestPixel
+
+			highestDelta := visibleDeltas[0]
+			lowestDelta := visibleDeltas[0]
+
+			for delta in visibleDeltas[1:]
+			{
+				highestDelta = math.max(highestDelta, delta)
+				lowestDelta = math.min(lowestDelta, delta)
+			}
+
+			cvdDeltaRange := highestDelta - lowestDelta
+
+			highestCandleY := Price_ToPixelY(highestClose, scaleData) - cameraPosY
+			lowestCandleY := Price_ToPixelY(lowestClose, scaleData) - cameraPosY
 
 			prevX := CandleList_IndexToPixelX(chart.candles[zoomIndex], visibleCandlesStartIndex + 1, scaleData) - cameraPosX
-			prevY := i32(f32((visibleDeltas[0] - cvdLowDelta) / cvdDeltaRange) * cvdPixelRange + cvdLowPixel)
+			prevY := i32(f32((visibleDeltas[0] - lowestDelta) / cvdDeltaRange) * pixelRange + lowestPixel)
 
 			for delta, i in visibleDeltas[1:]
 			{
 				x := CandleList_IndexToPixelX(chart.candles[zoomIndex], visibleCandlesStartIndex + i32(i) + 2, scaleData) - cameraPosX
-				y := i32(f32((delta - cvdLowDelta) / cvdDeltaRange) * cvdPixelRange + cvdLowPixel)
+				y := i32(f32((delta - lowestDelta) / cvdDeltaRange) * pixelRange + lowestPixel)
 
 				DrawLine(prevX, prevY, x, y, Color{255, 255, 255, 191})
 
