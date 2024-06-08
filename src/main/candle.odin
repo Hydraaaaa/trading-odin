@@ -1,6 +1,7 @@
 package main
 
 import "core:fmt"
+import "core:math"
 
 Candle :: struct
 {
@@ -135,17 +136,8 @@ Candle_Merge :: proc(candles : ..Candle) -> Candle
 
 	for candle in candles[1:]
 	{
-		newCandle.volume += candle.volume
-
-		if candle.high > newCandle.high
-		{
-			newCandle.high = candle.high
-		}
-
-		if candle.low < newCandle.low
-		{
-			newCandle.low = candle.low
-		}
+		newCandle.high = math.max(newCandle.high, candle.high)
+		newCandle.low = math.min(newCandle.low, candle.low)
 	}
 
 	newCandle.close = candles[len(candles) - 1].close
