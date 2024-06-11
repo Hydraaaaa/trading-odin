@@ -94,24 +94,22 @@ main :: proc()
 	downloadedTrades : []Trade
 	downloading := false
 
+	if len(chart.candles[Timeframe.MINUTE].candles) == 0
+	{
+		fmt.println("Waiting for first day's data to finish downloading before launching visual application")
+		DownloadDay(&chart.dateToDownload, &downloadedTrades)
+		AppendDay(&downloadedTrades, &chart)
+	}
+	else
+	{
+		Chart_CreateHTFCandles(&chart)
+	}
+
 	if chart.dateToDownload != currentDate
 	{
 		downloadThread = thread.create_and_start_with_poly_data2(&chart.dateToDownload, &downloadedTrades, DownloadDay)
 
 		downloading = true
-	}
-
-	if len(chart.candles[Timeframe.MINUTE].candles) == 0
-	{
-		fmt.println("Waiting for first day's data to finish downloading before launching visual application")
-		thread.join(downloadThread)
-		AppendDay(&downloadedTrades, &chart)
-		thread.destroy(downloadThread)
-		downloadThread = thread.create_and_start_with_poly_data2(&chart.dateToDownload, &downloadedTrades, DownloadDay)
-	}
-	else
-	{
-		Chart_CreateHTFCandles(&chart)
 	}
 
 	scaleData : ScaleData
