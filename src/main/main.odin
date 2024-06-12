@@ -318,7 +318,8 @@ main :: proc()
 				newEndTimestamp = CandleList_IndexToTimestamp(chart.candles[zoomIndex], cursorCandleIndex + 1)
 			}
 
-			if GetMouseDelta().x != 0
+			if GetMouseDelta().x != 0 ||
+			   IsMouseButtonPressed(.LEFT)
 			{
 				rulerZoomIndex : Timeframe
 
