@@ -62,7 +62,7 @@ VolumeProfile_Create :: proc(startTimestamp : i32, endTimestamp : i32, high : f3
         return VolumeProfile_CreateFromTrades(trades[:], high, low, bucketSize)
     }
 
-    profile := VolumeProfile_CreateInternal(startTimestamp, endTimestamp, high, low, chart, bucketSize)
+    profile := VolumeProfile_CreateBuckets(startTimestamp, endTimestamp, high, low, chart, bucketSize)
 
     VolumeProfile_Finalize(&profile)
 
@@ -70,7 +70,7 @@ VolumeProfile_Create :: proc(startTimestamp : i32, endTimestamp : i32, high : f3
 }
 
 @(private)
-VolumeProfile_CreateInternal :: proc(startTimestamp : i32, endTimestamp : i32, high : f32, low : f32, chart : Chart, bucketSize : f32) -> VolumeProfile
+VolumeProfile_CreateBuckets :: proc(startTimestamp : i32, endTimestamp : i32, high : f32, low : f32, chart : Chart, bucketSize : f32) -> VolumeProfile
 {
     profile : VolumeProfile
 
@@ -298,7 +298,7 @@ VolumeProfile_Resize :: proc(profile : ^VolumeProfile, oldStartTimestamp : i32, 
     // Add prepended data to profile
     if newStartTimestamp < oldStartTimestamp
     {
-        beforeProfile := VolumeProfile_CreateInternal(newStartTimestamp, oldStartTimestamp, newHigh, newLow, chart, profile.bucketSize)
+        beforeProfile := VolumeProfile_CreateBuckets(newStartTimestamp, oldStartTimestamp, newHigh, newLow, chart, profile.bucketSize)
         defer VolumeProfile_Destroy(beforeProfile)
 
         for bucket, i in beforeProfile.buckets
@@ -310,7 +310,7 @@ VolumeProfile_Resize :: proc(profile : ^VolumeProfile, oldStartTimestamp : i32, 
     else if newStartTimestamp > oldStartTimestamp
     {
         // Shrink the profile by subtracting
-        beforeProfile := VolumeProfile_CreateInternal(oldStartTimestamp, newStartTimestamp, oldHigh, oldLow, chart, profile.bucketSize)
+        beforeProfile := VolumeProfile_CreateBuckets(oldStartTimestamp, newStartTimestamp, oldHigh, oldLow, chart, profile.bucketSize)
         defer VolumeProfile_Destroy(beforeProfile)
 
         indexOffset := int((beforeProfile.bottomPrice - newBottomPrice) / beforeProfile.bucketSize)
@@ -329,7 +329,7 @@ VolumeProfile_Resize :: proc(profile : ^VolumeProfile, oldStartTimestamp : i32, 
     // Add appended data to profile
     if newEndTimestamp > oldEndTimestamp
     {
-        afterProfile := VolumeProfile_CreateInternal(oldEndTimestamp, newEndTimestamp, newHigh, newLow, chart, profile.bucketSize)
+        afterProfile := VolumeProfile_CreateBuckets(oldEndTimestamp, newEndTimestamp, newHigh, newLow, chart, profile.bucketSize)
         defer VolumeProfile_Destroy(afterProfile)
 
         for bucket, i in afterProfile.buckets
@@ -341,7 +341,7 @@ VolumeProfile_Resize :: proc(profile : ^VolumeProfile, oldStartTimestamp : i32, 
     else if newEndTimestamp < oldEndTimestamp
     {
         // Shrink the profile by subtracting
-        beforeProfile := VolumeProfile_CreateInternal(newEndTimestamp, oldEndTimestamp, oldHigh, oldLow, chart, profile.bucketSize)
+        beforeProfile := VolumeProfile_CreateBuckets(newEndTimestamp, oldEndTimestamp, oldHigh, oldLow, chart, profile.bucketSize)
         defer VolumeProfile_Destroy(beforeProfile)
 
         indexOffset := int((beforeProfile.bottomPrice - newBottomPrice) / beforeProfile.bucketSize)
