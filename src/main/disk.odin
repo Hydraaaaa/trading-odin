@@ -100,15 +100,13 @@ AppendDay :: proc(trades : ^[]Trade, chart : ^Chart)
 {
 	// Append to trades file <><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
 
-	firstTrade : Trade
-	previousDayLastTrade : Trade
-
 	tradesFile, err := os.open(TRADES_FILE, os.O_RDWR); assert(err == 0, "os.open error");
 
 	tradeBuffer : [size_of(Trade)]u8
 	_, err = os.read_at(tradesFile, tradeBuffer[:], size_of(DayMonthYear)); assert(err == 0, "os.read_at error")
 
-	firstTrade = (^Trade)(&tradeBuffer[0])^
+	firstTrade : Trade = (^Trade)(&tradeBuffer[0])^
+	previousDayLastTrade : Trade
 
 	_, err = os.seek(tradesFile, -size_of(Trade), os.SEEK_END); assert(err == 0, "os.seek error")
 	_, err = os.read(tradesFile, tradeBuffer[:]); assert(err == 0, "os.read error")
