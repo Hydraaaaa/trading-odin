@@ -141,9 +141,17 @@ main :: proc()
 	rulerLow : f32
 	defer VolumeProfile_Destroy(rulerProfile)
 
+	dailyCloseLevels := CandleCloseLevels_Create(chart.candles[Timeframe.DAY], SKYBLUE)
+	defer CandleCloseLevels_Destroy(dailyCloseLevels)
+
+	weeklyCloseLevels := CandleCloseLevels_Create(chart.candles[Timeframe.WEEK], YELLOW)
+	defer CandleCloseLevels_Destroy(weeklyCloseLevels)
+
 	drawCVD := true
 	drawDayOfWeek := false
 	drawSessions := true
+	drawHTFOutlines := true
+	drawCloseLevels := false
 	drawPreviousDayVolumeProfiles := true
 	drawPreviousWeekVolumeProfiles := false
 
@@ -494,8 +502,10 @@ main :: proc()
 		if IsKeyPressed(.C) { drawCVD = !drawCVD }
 		if IsKeyPressed(.M) { drawDayOfWeek = !drawDayOfWeek }
 		if IsKeyPressed(.S) { drawSessions = !drawSessions }
+		if IsKeyPressed(.Q) { drawCloseLevels = !drawCloseLevels }
 		if IsKeyPressed(.D) { drawPreviousDayVolumeProfiles = !drawPreviousDayVolumeProfiles }
 		if IsKeyPressed(.W) { drawPreviousWeekVolumeProfiles = !drawPreviousWeekVolumeProfiles }
+		if IsKeyPressed(.H) { drawHTFOutlines = !drawHTFOutlines }
 
 		// Rendering ><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
 
@@ -930,25 +940,23 @@ main :: proc()
 		}
 
 		// Draw Candle Close Levels
-		//for closeLevels in candleCloseLevels[:zoomIndex]
-		//{
-		//	for closeLevel in closeLevels.closeLevels
-		//	{
-		//		pixelY := i32(Price_ToPixelY(closeLevel.price, scaleData) - cameraPosY)
+		if drawCloseLevels
+		{
+			levelsSlice := []CandleCloseLevels{dailyCloseLevels, weeklyCloseLevels}
 
-		//		if (closeLevel.endTimestamp != -1)
-		//		{
-		//			if (showInvalidatedCloseLevels)
-		//			{
-		//				DrawLine(i32(Timestamp_ToPixelX(closeLevel.startTimestamp, scaleData) - cameraPosX), pixelY, i32(Timestamp_ToPixelX(closeLevel.endTimestamp, scaleData) - cameraPosX), pixelY, closeLevels.color)
-		//			}
-		//		}
-		//		else
-		//		{
-		//			DrawLine(i32(Timestamp_ToPixelX(closeLevel.startTimestamp, scaleData) - cameraPosX), pixelY, screenWidth, pixelY, closeLevels.color)
-		//		}
-		//	}
-		//}
+			for closeLevels in levelsSlice
+			{
+				for level in closeLevels.levels
+				{
+					pixelY := i32(Price_ToPixelY(level.price, scaleData) - cameraPosY)
+
+					// endX := endTimestamp == -1 ? screenWidth : endTimestamp
+					endX := screenWidth * i32(level.endTimestamp == -1) + i32(Timestamp_ToPixelX(level.endTimestamp, scaleData) - cameraPosX) * i32(level.endTimestamp != -1)
+
+					DrawLine(i32(Timestamp_ToPixelX(level.startTimestamp, scaleData) - cameraPosX), pixelY, endX, pixelY, closeLevels.color)
+				}
+			}
+		}
 
 		// Draw days of week
 		if drawDayOfWeek &&
@@ -1004,43 +1012,47 @@ main :: proc()
 			}
 		}
 
+
 		// Draw HTF Candle Outlines
-		zoomIndexHTF := zoomIndex + Timeframe(1)
-
-		if zoomIndexHTF < Timeframe(TIMEFRAME_COUNT)
+		if drawHTFOutlines
 		{
-			visibleHTFCandles, visibleHTFCandlesStartIndex := CandleList_CandlesBetweenTimestamps(chart.candles[zoomIndexHTF], cameraTimestamp, cameraEndTimestamp)
-			for candle, i in visibleHTFCandles
+			zoomIndexHTF := zoomIndex + Timeframe(1)
+
+			if zoomIndexHTF < Timeframe(TIMEFRAME_COUNT)
 			{
-				xPos : i32 = CandleList_IndexToPixelX(chart.candles[zoomIndexHTF], i32(i) + visibleHTFCandlesStartIndex, scaleData) - cameraPosX
-				candleWidth : i32 = CandleList_IndexToWidth(chart.candles[zoomIndexHTF], i32(i) + visibleHTFCandlesStartIndex, scaleData)
-
-				scaledOpen : i32 = Price_ToPixelY(candle.open, scaleData)
-				scaledClose : i32 = Price_ToPixelY(candle.close, scaleData)
-				scaledHigh : i32 = Price_ToPixelY(candle.high, scaleData)
-				scaledLow : i32 = Price_ToPixelY(candle.low, scaleData)
-
-				if scaledClose > scaledOpen // Red
+				visibleHTFCandles, visibleHTFCandlesStartIndex := CandleList_CandlesBetweenTimestamps(chart.candles[zoomIndexHTF], cameraTimestamp, cameraEndTimestamp)
+				for candle, i in visibleHTFCandles
 				{
-					candleHeight := scaledClose - scaledOpen
+					xPos : i32 = CandleList_IndexToPixelX(chart.candles[zoomIndexHTF], i32(i) + visibleHTFCandlesStartIndex, scaleData) - cameraPosX
+					candleWidth : i32 = CandleList_IndexToWidth(chart.candles[zoomIndexHTF], i32(i) + visibleHTFCandlesStartIndex, scaleData)
 
-					if candleHeight < 1
+					scaledOpen : i32 = Price_ToPixelY(candle.open, scaleData)
+					scaledClose : i32 = Price_ToPixelY(candle.close, scaleData)
+					scaledHigh : i32 = Price_ToPixelY(candle.high, scaleData)
+					scaledLow : i32 = Price_ToPixelY(candle.low, scaleData)
+
+					if scaledClose > scaledOpen // Red
 					{
-						candleHeight = 1
+						candleHeight := scaledClose - scaledOpen
+
+						if candleHeight < 1
+						{
+							candleHeight = 1
+						}
+
+						DrawRectangleLines(xPos, scaledOpen - cameraPosY, candleWidth, candleHeight, Color{255, 0, 0, 63})
 					}
-
-					DrawRectangleLines(xPos, scaledOpen - cameraPosY, candleWidth, candleHeight, Color{255, 0, 0, 63})
-				}
-				else // Green
-				{
-					candleHeight := scaledOpen - scaledClose
-
-					if candleHeight < 1
+					else // Green
 					{
-						candleHeight = 1
-					}
+						candleHeight := scaledOpen - scaledClose
 
-					DrawRectangleLines(xPos, scaledClose - cameraPosY, candleWidth, candleHeight, Color{0, 255, 0, 63})
+						if candleHeight < 1
+						{
+							candleHeight = 1
+						}
+
+						DrawRectangleLines(xPos, scaledClose - cameraPosY, candleWidth, candleHeight, Color{0, 255, 0, 63})
+					}
 				}
 			}
 		}
