@@ -406,12 +406,14 @@ VolumeProfile_Finalize :: proc(profile : ^VolumeProfile)
     }
 
     // Calculate Value Area
+    // Find the smallest area with a total volume no less than the required volume
     startIndex := 0
     numBuckets := 1
-    volumeThreshold := totalVolume * 0.682
+    requiredVolume := totalVolume * 0.682
     currentVolume = profile.buckets[0].buyVolume + profile.buckets[0].sellVolume
 
-    for currentVolume < volumeThreshold
+    // Determine the initial area size (number of buckets needed to reach the required volume starting from index 0)
+    for currentVolume < requiredVolume
     {
         currentVolume += profile.buckets[numBuckets].buyVolume + profile.buckets[numBuckets].sellVolume
         numBuckets += 1
@@ -421,6 +423,8 @@ VolumeProfile_Finalize :: proc(profile : ^VolumeProfile)
     newStartIndex := startIndex + 1
     newNumBuckets := numBuckets
 
+    // Loop through the profile, incrementing the starting index
+    // Shrink the area whenever a smaller area still meets the required volume
     for newStartIndex + newNumBuckets < len(profile.buckets)
     {
         newVolume += profile.buckets[newStartIndex + newNumBuckets].buyVolume + profile.buckets[newStartIndex + newNumBuckets].sellVolume
@@ -431,22 +435,23 @@ VolumeProfile_Finalize :: proc(profile : ^VolumeProfile)
             startIndex = newStartIndex
         }
 
-        smallerVolume := newVolume - profile.buckets[newStartIndex].buyVolume + profile.buckets[newStartIndex].sellVolume
-        smallerStartIndex := newStartIndex + 1
-        smallerNumBuckets := newNumBuckets - 1
+        smallerAreaVolume := newVolume - profile.buckets[newStartIndex].buyVolume + profile.buckets[newStartIndex].sellVolume
+        smallerAreaStartIndex := newStartIndex + 1
+        smallerAreaNumBuckets := newNumBuckets - 1
 
-        for smallerVolume > volumeThreshold
+        for smallerAreaVolume > requiredVolume &&
+            smallerAreaNumBuckets > 0
         {
-            currentVolume = smallerVolume
-            newVolume = smallerVolume
-            startIndex = smallerStartIndex
-            newStartIndex = smallerStartIndex
-            numBuckets = smallerNumBuckets
-            numBuckets = smallerNumBuckets
+            currentVolume = smallerAreaVolume
+            newVolume = smallerAreaVolume
+            startIndex = smallerAreaStartIndex
+            newStartIndex = smallerAreaStartIndex
+            numBuckets = smallerAreaNumBuckets
+            numBuckets = smallerAreaNumBuckets
 
-            smallerVolume -= profile.buckets[smallerStartIndex].buyVolume + profile.buckets[smallerStartIndex].sellVolume
-            smallerStartIndex += 1
-            smallerNumBuckets -= 1
+            smallerAreaVolume -= profile.buckets[smallerAreaStartIndex].buyVolume + profile.buckets[smallerAreaStartIndex].sellVolume
+            smallerAreaStartIndex += 1
+            smallerAreaNumBuckets -= 1
         }
 
         newVolume -= profile.buckets[newStartIndex].buyVolume + profile.buckets[newStartIndex].sellVolume
@@ -461,7 +466,7 @@ VolumeProfile_Finalize :: proc(profile : ^VolumeProfile)
     vahIndex := profile.pocIndex
     currentVolume = highestBucketVolume
 
-    for currentVolume < volumeThreshold
+    for currentVolume < requiredVolume
     {
         upperVolume := profile.buckets[math.min(vahIndex + 1, len(profile.buckets) - 1)].buyVolume + \
                        profile.buckets[math.min(vahIndex + 1, len(profile.buckets) - 1)].sellVolume + \
