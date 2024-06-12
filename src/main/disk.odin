@@ -6,6 +6,7 @@ import "core:os"
 import "core:mem"
 import "core:math"
 
+DATA_FOLDER :: "data"
 TRADES_FILE :: "data/trades.bin"
 MINUTE_CANDLES_FILE :: "data/minutecandles.bin"
 MINUTE_DELTA_FILE :: "data/minutedelta.bin"
@@ -17,6 +18,11 @@ LoadDateToDownload :: proc() -> DayMonthYear
 {
 	tradesFile : os.Handle
 	err : os.Errno
+
+	if !os.is_dir(DATA_FOLDER)
+	{
+		os.make_directory(DATA_FOLDER)
+	}
 
 	if !os.is_file(TRADES_FILE)
 	{
