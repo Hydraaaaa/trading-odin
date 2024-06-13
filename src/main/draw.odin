@@ -12,8 +12,8 @@ DrawVolumeProfile :: proc(posX : i32, width : i32, cameraPosY : i32, profile : V
 
         for bucket, index in profile.buckets
         {
-            bucketStartPixel := Price_ToPixelY(VolumeProfile_BucketToPrice(profile, index), scaleData) - cameraPosY
-            bucketEndPixel := Price_ToPixelY(VolumeProfile_BucketToPrice(profile, index + 1), scaleData) - cameraPosY
+            bucketStartPixel := VolumeProfile_BucketToPixelY(profile, index, scaleData) - cameraPosY
+            bucketEndPixel := VolumeProfile_BucketToPixelY(profile, index + 1, scaleData) - cameraPosY
 
             bucketThickness := math.max(bucketStartPixel - bucketEndPixel, 1)
 
@@ -35,8 +35,8 @@ DrawVolumeProfile :: proc(posX : i32, width : i32, cameraPosY : i32, profile : V
         color := raylib.RED
         color.a = alpha
 
-        bucketStartPixel := Price_ToPixelY(VolumeProfile_BucketToPrice(profile, profile.pocIndex), scaleData) - cameraPosY
-        bucketEndPixel := Price_ToPixelY(VolumeProfile_BucketToPrice(profile, profile.pocIndex + 1), scaleData) - cameraPosY
+        bucketStartPixel := VolumeProfile_BucketToPixelY(profile, profile.pocIndex, scaleData) - cameraPosY
+        bucketEndPixel := VolumeProfile_BucketToPixelY(profile, profile.pocIndex + 1, scaleData) - cameraPosY
 
         bucketThickness := math.max(bucketStartPixel - bucketEndPixel, 1)
 
@@ -48,15 +48,15 @@ DrawVolumeProfile :: proc(posX : i32, width : i32, cameraPosY : i32, profile : V
         color := raylib.SKYBLUE
         color.a = alpha
 
-        bucketStartPixel := Price_ToPixelY(VolumeProfile_BucketToPrice(profile, profile.valIndex), scaleData) - cameraPosY
-        bucketEndPixel := Price_ToPixelY(VolumeProfile_BucketToPrice(profile, profile.valIndex + 1), scaleData) - cameraPosY
+        bucketStartPixel := VolumeProfile_BucketToPixelY(profile, profile.valIndex, scaleData) - cameraPosY
+        bucketEndPixel := VolumeProfile_BucketToPixelY(profile, profile.valIndex + 1, scaleData) - cameraPosY
 
         bucketThickness := math.max(bucketStartPixel - bucketEndPixel, 1)
 
         raylib.DrawRectangle(posX, bucketEndPixel, width, bucketThickness, color)
 
-        bucketStartPixel = Price_ToPixelY(VolumeProfile_BucketToPrice(profile, profile.vahIndex), scaleData) - cameraPosY
-        bucketEndPixel = Price_ToPixelY(VolumeProfile_BucketToPrice(profile, profile.vahIndex + 1), scaleData) - cameraPosY
+        bucketStartPixel = VolumeProfile_BucketToPixelY(profile, profile.vahIndex, scaleData) - cameraPosY
+        bucketEndPixel = VolumeProfile_BucketToPixelY(profile, profile.vahIndex + 1, scaleData) - cameraPosY
 
         bucketThickness = math.max(bucketStartPixel - bucketEndPixel, 1)
 
@@ -68,15 +68,15 @@ DrawVolumeProfile :: proc(posX : i32, width : i32, cameraPosY : i32, profile : V
         color := raylib.BLUE
         color.a = alpha
 
-        bucketStartPixel := Price_ToPixelY(VolumeProfile_BucketToPrice(profile, profile.tvValIndex), scaleData) - cameraPosY
-        bucketEndPixel := Price_ToPixelY(VolumeProfile_BucketToPrice(profile, profile.tvValIndex + 1), scaleData) - cameraPosY
+        bucketStartPixel := VolumeProfile_BucketToPixelY(profile, profile.tvValIndex, scaleData) - cameraPosY
+        bucketEndPixel := VolumeProfile_BucketToPixelY(profile, profile.tvValIndex + 1, scaleData) - cameraPosY
 
         bucketThickness := math.max(bucketStartPixel - bucketEndPixel, 1)
 
         raylib.DrawRectangle(posX, bucketEndPixel, width, bucketThickness, color)
 
-        bucketStartPixel = Price_ToPixelY(VolumeProfile_BucketToPrice(profile, profile.tvVahIndex), scaleData) - cameraPosY
-        bucketEndPixel = Price_ToPixelY(VolumeProfile_BucketToPrice(profile, profile.tvVahIndex + 1), scaleData) - cameraPosY
+        bucketStartPixel = VolumeProfile_BucketToPixelY(profile, profile.tvVahIndex, scaleData) - cameraPosY
+        bucketEndPixel = VolumeProfile_BucketToPixelY(profile, profile.tvVahIndex + 1, scaleData) - cameraPosY
 
         bucketThickness = math.max(bucketStartPixel - bucketEndPixel, 1)
 
