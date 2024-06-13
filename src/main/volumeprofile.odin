@@ -521,3 +521,13 @@ VolumeProfile_BucketToPixelY :: proc(profile : VolumeProfile, index : int, scale
 {
     return Price_ToPixelY(VolumeProfile_BucketToPrice(profile, index, roundDown), scaleData)
 }
+
+VolumeProfile_PriceToBucket :: proc(profile : VolumeProfile, price : f32) -> int
+{
+    return int((price - profile.bottomPrice) / profile.bucketSize)
+}
+
+VolumeProfile_PixelYToBucket :: proc(profile : VolumeProfile, pixelY : i32, scaleData : ScaleData) -> int
+{
+    return VolumeProfile_PriceToBucket(profile, Price_FromPixelY(pixelY, scaleData))
+}

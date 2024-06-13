@@ -10,15 +10,34 @@ DrawVolumeProfile :: proc(posX : i32, width : i32, cameraPosY : i32, profile : V
     {
         highestBucketVolume := profile.buckets[profile.pocIndex].buyVolume + profile.buckets[profile.pocIndex].sellVolume
 
-        for bucket, index in profile.buckets
+        bucketIndex := math.min(0, VolumeProfile_PixelYToBucket(profile, cameraPosY, scaleData))
+
+        endIndex := math.min(len(profile.buckets), VolumeProfile_PixelYToBucket(profile, cameraPosY, scaleData))
+
+        for bucketIndex < endIndex
         {
-            bucketStartPixel := VolumeProfile_BucketToPixelY(profile, index, scaleData) - cameraPosY
-            bucketEndPixel := VolumeProfile_BucketToPixelY(profile, index + 1, scaleData) - cameraPosY
+            buyVolume := profile.buckets[bucketIndex].buyVolume
+            totalVolume := profile.buckets[bucketIndex].buyVolume + profile.buckets[bucketIndex].sellVolume
+
+            bucketStartPixel := VolumeProfile_BucketToPixelY(profile, bucketIndex, scaleData) - cameraPosY
+            bucketEndPixel := VolumeProfile_BucketToPixelY(profile, bucketIndex + 1, scaleData) - cameraPosY
+
+            // If there are multiple buckets within one pixel, only draw the biggest
+            for bucketStartPixel == bucketEndPixel &&
+                bucketIndex < endIndex - 1
+            {
+                bucketIndex += 1
+
+                buyVolume = math.max(buyVolume, profile.buckets[bucketIndex].buyVolume)
+                totalVolume = math.max(totalVolume, profile.buckets[bucketIndex].buyVolume + profile.buckets[bucketIndex].sellVolume)
+
+                bucketEndPixel = VolumeProfile_BucketToPixelY(profile, bucketIndex + 1, scaleData) - cameraPosY
+            }
 
             bucketThickness := math.max(bucketStartPixel - bucketEndPixel, 1)
 
-            buyPixels := i32(bucket.buyVolume / highestBucketVolume * f32(width))
-            sellPixels := i32(bucket.sellVolume / highestBucketVolume * f32(width))
+            buyPixels := i32(buyVolume / highestBucketVolume * f32(width))
+            sellPixels := i32((totalVolume - buyVolume) / highestBucketVolume * f32(width))
 
             blueColor := raylib.BLUE
             blueColor.a = alpha
@@ -27,6 +46,8 @@ DrawVolumeProfile :: proc(posX : i32, width : i32, cameraPosY : i32, profile : V
 
             raylib.DrawRectangle(posX, bucketEndPixel, buyPixels, bucketThickness, blueColor)
             raylib.DrawRectangle(posX + buyPixels, bucketEndPixel, sellPixels, bucketThickness, orangeColor)
+
+            bucketIndex += 1
         }
     }
 
