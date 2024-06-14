@@ -272,12 +272,10 @@ VolumeProfile_Resize :: proc(profile : ^VolumeProfile, oldStartTimestamp : i32, 
        newEndTimestamp < oldStartTimestamp ||
        newEndTimestamp - newStartTimestamp / 2 < oldEndTimestamp - oldStartTimestamp
     {
+        delete(profile.buckets)
         profile^ = VolumeProfile_Create(newStartTimestamp, newEndTimestamp, newHigh, newLow, chart, profile.bucketSize)
         return
     }
-
-    // TODO: Determine if more than half of the current profile is being used in the new profile
-    // If not, generate a new profile
 
     newBottomPrice := newLow - math.mod(newLow, profile.bucketSize)
     newTopPrice := newHigh - math.mod(newHigh, profile.bucketSize) + profile.bucketSize

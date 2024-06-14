@@ -126,20 +126,23 @@ main :: proc()
 	zoomLevel := 0
 	verticalZoomLevel : f32 = 0
 
+	panning := false
 	dragging := false
-	draggingRuler := false
+	hasPanned := false
 	rightDragging := false
 	rightDraggingPriceStart : f32
 
 	dragStartCandleIndex : i32
 	dragStartZoomIndex : Timeframe
 
-	rulerProfile : VolumeProfile
-	rulerStartTimestamp : i32
-	rulerEndTimestamp : i32
-	rulerHigh : f32
-	rulerLow : f32
-	defer VolumeProfile_Destroy(rulerProfile)
+	multitools : [dynamic]Multitool
+	defer for multitool in multitools
+	{
+		Multitool_Destroy(multitool)
+	}
+
+	selectedMultitool : ^Multitool
+	selectedMultitoolIndex : int
 
 	dailyCloseLevels := CandleCloseLevels_Create(chart.candles[Timeframe.DAY], SKYBLUE)
 	defer CandleCloseLevels_Destroy(dailyCloseLevels)
@@ -178,6 +181,8 @@ main :: proc()
 	lowestCandleIndex += visibleCandlesStartIndex
 	cursorCandleIndex : i32
 	cursorCandle : Candle
+	isCursorSnapped := false
+	cursorSnapPrice : f32
 
 	initialVerticalScale : f64
 
@@ -284,43 +289,34 @@ main :: proc()
 		// Camera Panning
 		if IsMouseButtonPressed(.LEFT)
 		{
-			dragging = !IsKeyDown(KeyboardKey.LEFT_SHIFT)
-			draggingRuler = IsKeyDown(KeyboardKey.LEFT_SHIFT)
 			dragStartCandleIndex = cursorCandleIndex
 			dragStartZoomIndex = zoomIndex
-		}
-
-		if IsMouseButtonReleased(.LEFT)
-		{
-			dragging = false
-			draggingRuler = false
-		}
-
-		if dragging
-		{
-			cameraPosX -= i32(GetMouseDelta().x)
-			cameraPosY -= i32(GetMouseDelta().y)
-		}
-
-		if draggingRuler
-		{
-			newStartTimestamp : i32
-			newEndTimestamp : i32
-
-			if CandleList_IndexToTimestamp(chart.candles[dragStartZoomIndex], dragStartCandleIndex) > CandleList_IndexToTimestamp(chart.candles[zoomIndex], cursorCandleIndex)
+			if !IsKeyDown(.LEFT_SHIFT)
 			{
-				newStartTimestamp = CandleList_IndexToTimestamp(chart.candles[zoomIndex], cursorCandleIndex)
-				newEndTimestamp = CandleList_IndexToTimestamp(chart.candles[dragStartZoomIndex], dragStartCandleIndex + 1)
+				panning = true
+				hasPanned = false
 			}
 			else
 			{
-				newStartTimestamp = CandleList_IndexToTimestamp(chart.candles[dragStartZoomIndex], dragStartCandleIndex)
-				newEndTimestamp = CandleList_IndexToTimestamp(chart.candles[zoomIndex], cursorCandleIndex + 1)
-			}
+				dragging = true
+				append(&multitools, Multitool{})
+				selectedMultitool = &multitools[len(multitools) - 1]
+				selectedMultitoolIndex = len(multitools) - 1
 
-			if GetMouseDelta().x != 0 ||
-			   IsMouseButtonPressed(.LEFT)
-			{
+				newStartTimestamp : i32
+				newEndTimestamp : i32
+
+				if CandleList_IndexToTimestamp(chart.candles[dragStartZoomIndex], dragStartCandleIndex) > CandleList_IndexToTimestamp(chart.candles[zoomIndex], cursorCandleIndex)
+				{
+					newStartTimestamp = CandleList_IndexToTimestamp(chart.candles[zoomIndex], cursorCandleIndex)
+					newEndTimestamp = CandleList_IndexToTimestamp(chart.candles[dragStartZoomIndex], dragStartCandleIndex + 1)
+				}
+				else
+				{
+					newStartTimestamp = CandleList_IndexToTimestamp(chart.candles[dragStartZoomIndex], dragStartCandleIndex)
+					newEndTimestamp = CandleList_IndexToTimestamp(chart.candles[zoomIndex], cursorCandleIndex + 1)
+				}
+
 				rulerZoomIndex : Timeframe
 
 				if dragStartZoomIndex > zoomIndex
@@ -337,20 +333,95 @@ main :: proc()
 				highCandle, _ := Candle_HighestHigh(chart.candles[rulerZoomIndex].candles[startIndex:endIndex])
 				lowCandle, _ := Candle_LowestLow(chart.candles[rulerZoomIndex].candles[startIndex:endIndex])
 
-				if rulerProfile.bucketSize == 0
-				{
-					rulerProfile = VolumeProfile_Create(newStartTimestamp, newEndTimestamp, highCandle.high, lowCandle.low, chart, 25)
-				}
-				else
-				{
-					VolumeProfile_Resize(&rulerProfile, rulerStartTimestamp, rulerEndTimestamp, newStartTimestamp, newEndTimestamp, rulerHigh, rulerLow, highCandle.high, lowCandle.low, chart)
-				}
+				selectedMultitool.volumeProfile = VolumeProfile_Create(newStartTimestamp, newEndTimestamp, highCandle.high, lowCandle.low, chart, 25)
 
-				rulerStartTimestamp = newStartTimestamp
-				rulerEndTimestamp = newEndTimestamp
-				rulerHigh = highCandle.high
-				rulerLow = lowCandle.low
+				selectedMultitool.startTimestamp = newStartTimestamp
+				selectedMultitool.endTimestamp = newEndTimestamp
+
+				selectedMultitool.volumeProfileHigh = selectedMultitool.volumeProfile.bottomPrice + f32(len(selectedMultitool.volumeProfile.buckets)) * selectedMultitool.volumeProfile.bucketSize
+				selectedMultitool.volumeProfileLow = selectedMultitool.volumeProfile.bottomPrice
+
+				//selectedMultitool.fibHigh = 
+				//selectedMultitool.fibLow = 
 			}
+		}
+
+		if IsMouseButtonReleased(.LEFT)
+		{
+			if panning && !hasPanned
+			{
+				selectedMultitool = nil
+				selectedMultitoolIndex = -1
+
+				// TODO: Select multitool not already selected if clicked same spot
+				for i in 0 ..< len(multitools)
+				{
+					if Multitool_IsOverlapping(multitools[i], GetMouseX() + cameraPosX, GetMouseY() + cameraPosY, scaleData)
+					{
+						selectedMultitool = &multitools[i]
+						selectedMultitoolIndex = i
+						break
+					}
+				}
+			}
+
+			panning = false
+			dragging = false
+		}
+
+		if panning &&
+		   (GetMouseDelta().x != 0 ||
+		    GetMouseDelta().y != 0)
+		{
+			hasPanned = true
+
+			cameraPosX -= i32(GetMouseDelta().x)
+			cameraPosY -= i32(GetMouseDelta().y)
+		}
+
+		if dragging &&
+		   GetMouseDelta().x != 0
+		{
+			newStartTimestamp : i32
+			newEndTimestamp : i32
+
+			if CandleList_IndexToTimestamp(chart.candles[dragStartZoomIndex], dragStartCandleIndex) > CandleList_IndexToTimestamp(chart.candles[zoomIndex], cursorCandleIndex)
+			{
+				newStartTimestamp = CandleList_IndexToTimestamp(chart.candles[zoomIndex], cursorCandleIndex)
+				newEndTimestamp = CandleList_IndexToTimestamp(chart.candles[dragStartZoomIndex], dragStartCandleIndex + 1)
+			}
+			else
+			{
+				newStartTimestamp = CandleList_IndexToTimestamp(chart.candles[dragStartZoomIndex], dragStartCandleIndex)
+				newEndTimestamp = CandleList_IndexToTimestamp(chart.candles[zoomIndex], cursorCandleIndex + 1)
+			}
+
+			rulerZoomIndex : Timeframe
+
+			if dragStartZoomIndex > zoomIndex
+			{
+				rulerZoomIndex = zoomIndex
+			}
+			else
+			{
+				rulerZoomIndex = dragStartZoomIndex
+			}
+
+			startIndex := CandleList_TimestampToIndex(chart.candles[rulerZoomIndex], newStartTimestamp)
+			endIndex := CandleList_TimestampToIndex(chart.candles[rulerZoomIndex], newEndTimestamp)
+			highCandle, _ := Candle_HighestHigh(chart.candles[rulerZoomIndex].candles[startIndex:endIndex])
+			lowCandle, _ := Candle_LowestLow(chart.candles[rulerZoomIndex].candles[startIndex:endIndex])
+
+			VolumeProfile_Resize(&selectedMultitool.volumeProfile, selectedMultitool.startTimestamp, selectedMultitool.endTimestamp, newStartTimestamp, newEndTimestamp, selectedMultitool.volumeProfileHigh, selectedMultitool.volumeProfileLow, highCandle.high, lowCandle.low, chart)
+
+			selectedMultitool.startTimestamp = newStartTimestamp
+			selectedMultitool.endTimestamp = newEndTimestamp
+
+			selectedMultitool.volumeProfileHigh = selectedMultitool.volumeProfile.bottomPrice + f32(len(selectedMultitool.volumeProfile.buckets)) * selectedMultitool.volumeProfile.bucketSize
+			selectedMultitool.volumeProfileLow = selectedMultitool.volumeProfile.bottomPrice
+
+			//selectedMultitool.fibHigh = 
+			//selectedMultitool.fibLow = 
 		}
 
 		// Vertical Scale Adjustment
@@ -500,6 +571,15 @@ main :: proc()
 			cameraPosY = Price_ToPixelY(priceUpper, scaleData) - pixelOffset
 		}
 
+		if IsKeyPressed(.DELETE) &&
+		   selectedMultitool != nil
+		{
+			unordered_remove(&multitools, selectedMultitoolIndex)
+
+			selectedMultitool = nil
+			selectedMultitoolIndex = -1
+		}
+
 		if IsKeyPressed(.C) { drawCVD = !drawCVD }
 		if IsKeyPressed(.M) { drawDayOfWeek = !drawDayOfWeek }
 		if IsKeyPressed(.S) { drawSessions = !drawSessions }
@@ -507,6 +587,71 @@ main :: proc()
 		if IsKeyPressed(.D) { drawPreviousDayVolumeProfiles = !drawPreviousDayVolumeProfiles }
 		if IsKeyPressed(.W) { drawPreviousWeekVolumeProfiles = !drawPreviousWeekVolumeProfiles }
 		if IsKeyPressed(.H) { drawHTFOutlines = !drawHTFOutlines }
+
+		// Snap cursor to nearest OHLC value
+		{
+			SNAP_PIXELS :: 32
+
+			mouseY := GetMouseY()
+
+			high := Price_ToPixelY(cursorCandle.high, scaleData) - cameraPosY
+			low := Price_ToPixelY(cursorCandle.low, scaleData) - cameraPosY
+
+			midHigh : i32
+			midLow : i32
+			midHighPrice : f32
+			midLowPrice : f32
+
+			if cursorCandle.open > cursorCandle.close
+			{
+				midHigh = Price_ToPixelY(cursorCandle.open, scaleData) - cameraPosY
+				midLow = Price_ToPixelY(cursorCandle.close, scaleData) - cameraPosY
+				midHighPrice = cursorCandle.open
+				midLowPrice = cursorCandle.close
+			}
+			else
+			{
+				midHigh = Price_ToPixelY(cursorCandle.close, scaleData) - cameraPosY
+				midLow = Price_ToPixelY(cursorCandle.open, scaleData) - cameraPosY
+				midHighPrice = cursorCandle.close
+				midLowPrice = cursorCandle.open
+			}
+
+			highestSnap := high - SNAP_PIXELS
+			lowestSnap := low + SNAP_PIXELS
+
+			if mouseY >= highestSnap &&
+			   mouseY <= lowestSnap
+			{
+				// Midpoints (in pixels)
+				highMidHigh := (high + midHigh) / 2
+				midHighMidLow := (midHigh + midLow) / 2
+				midLowLow := (midLow + low) / 2
+
+				if mouseY < highMidHigh
+				{
+					mouseY = high
+					cursorSnapPrice = cursorCandle.high
+				}
+				else if mouseY < midHighMidLow
+				{
+					mouseY = midHigh
+					cursorSnapPrice = midHighPrice
+				}
+				else if mouseY < midLowLow
+				{
+					mouseY = midLow
+					cursorSnapPrice = midLowPrice
+				}
+				else
+				{
+					mouseY = low
+					cursorSnapPrice = cursorCandle.low
+				}
+
+				isCursorSnapped = true
+			}
+		}
 
 		// Rendering ><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
 
@@ -1058,11 +1203,14 @@ main :: proc()
 			}
 		}
 
-		if rulerProfile.bucketSize != 0
+		for multitool in multitools
 		{
-			startPixel := Timestamp_ToPixelX(rulerStartTimestamp, scaleData)
-			width := Timestamp_ToPixelX(rulerEndTimestamp, scaleData) - startPixel
-			DrawVolumeProfile(startPixel - cameraPosX, width, cameraPosY, rulerProfile, scaleData, 100, true, false, false, false, false)
+			startPixel := Timestamp_ToPixelX(multitool.startTimestamp, scaleData)
+			width := Timestamp_ToPixelX(multitool.endTimestamp, scaleData) - startPixel
+			if Multitool_IsOverlappingRect(multitool, cameraPosX, cameraPosY, screenWidth, screenHeight, scaleData)
+			{
+				DrawVolumeProfile(startPixel - cameraPosX, width, cameraPosY, multitool.volumeProfile, scaleData, 100, true, false, false, false, false)
+			}
 		}
 
 		// Draw Candles
@@ -1200,96 +1348,43 @@ main :: proc()
 			}
 		}
 
-		// Snap cursor to nearest OHLC value
-		mouseY := GetMouseY()
-		mouseSnapPrice : f32
-		isSnapped := false
-
+		for multitool in multitools
 		{
-			SNAP_PIXELS :: 32
-
-			high := Price_ToPixelY(cursorCandle.high, scaleData) - cameraPosY
-			low := Price_ToPixelY(cursorCandle.low, scaleData) - cameraPosY
-
-			midHigh : i32
-			midLow : i32
-			midHighPrice : f32
-			midLowPrice : f32
-
-			if cursorCandle.open > cursorCandle.close
-			{
-				midHigh = Price_ToPixelY(cursorCandle.open, scaleData) - cameraPosY
-				midLow = Price_ToPixelY(cursorCandle.close, scaleData) - cameraPosY
-				midHighPrice = cursorCandle.open
-				midLowPrice = cursorCandle.close
-			}
-			else
-			{
-				midHigh = Price_ToPixelY(cursorCandle.close, scaleData) - cameraPosY
-				midLow = Price_ToPixelY(cursorCandle.open, scaleData) - cameraPosY
-				midHighPrice = cursorCandle.close
-				midLowPrice = cursorCandle.open
-			}
-
-			highestSnap := high - SNAP_PIXELS
-			lowestSnap := low + SNAP_PIXELS
-
-			if mouseY >= highestSnap &&
-			   mouseY <= lowestSnap
-			{
-				// Midpoints (in pixels)
-				highMidHigh := (high + midHigh) / 2
-				midHighMidLow := (midHigh + midLow) / 2
-				midLowLow := (midLow + low) / 2
-
-				if mouseY < highMidHigh
-				{
-					mouseY = high
-					mouseSnapPrice = cursorCandle.high
-				}
-				else if mouseY < midHighMidLow
-				{
-					mouseY = midHigh
-					mouseSnapPrice = midHighPrice
-				}
-				else if mouseY < midLowLow
-				{
-					mouseY = midLow
-					mouseSnapPrice = midLowPrice
-				}
-				else
-				{
-					mouseY = low
-					mouseSnapPrice = cursorCandle.low
-				}
-
-				isSnapped = true
-			}
+			startPixel := Timestamp_ToPixelX(multitool.startTimestamp, scaleData)
+			width := Timestamp_ToPixelX(multitool.endTimestamp, scaleData) - startPixel
+			DrawVolumeProfile(startPixel - cameraPosX, width, cameraPosY, multitool.volumeProfile, scaleData, 63, true, false, false, false, false)
+			DrawVolumeProfile(startPixel - cameraPosX + width, width, cameraPosY, multitool.volumeProfile, scaleData, 191, false, true, true, true, true)
 		}
 
-		if rulerProfile.bucketSize != 0
+		if selectedMultitool != nil
 		{
-			startPixel := Timestamp_ToPixelX(rulerStartTimestamp, scaleData)
-			width := Timestamp_ToPixelX(rulerEndTimestamp, scaleData) - startPixel
-			DrawVolumeProfile(startPixel - cameraPosX, width, cameraPosY, rulerProfile, scaleData, 63, true, false, false, false, false)
-			DrawVolumeProfile(startPixel - cameraPosX + width, width, cameraPosY, rulerProfile, scaleData, 191, false, true, true, true, true)
+			// TODO: Change volumeProfileHigh/Low to fibHigh/Low
+			posX := Timestamp_ToPixelX(selectedMultitool.startTimestamp, scaleData)
+			posY := Price_ToPixelY(selectedMultitool.volumeProfileHigh, scaleData)
+			width := Timestamp_ToPixelX(selectedMultitool.endTimestamp, scaleData) - posX
+			height := Price_ToPixelY(selectedMultitool.volumeProfileLow, scaleData) - posY
+			DrawRectangleLines(posX - cameraPosX, posY - cameraPosY, width, height, {255, 255, 255, 127})
 		}
 
 		// Draw Crosshair
-		crosshairColor := WHITE
-		crosshairColor.a = 127
-
-		for i : i32 = 0; i < screenWidth; i += 3
 		{
-			DrawPixel(i, mouseY, crosshairColor)
-		}
+			mouseY := GetMouseY()
 
-		xPos : i32 = CandleList_IndexToPixelX(chart.candles[zoomIndex], cursorCandleIndex, scaleData) - cameraPosX
-		candleWidth : i32 = CandleList_IndexToWidth(chart.candles[zoomIndex], cursorCandleIndex, scaleData)
+			crosshairColor := WHITE
+			crosshairColor.a = 127
 
-		for i : i32 = 0; i < screenHeight; i += 3
-		{
-			DrawPixel(xPos + i32(f32(candleWidth) / 2 - 0.5), i, crosshairColor)
+			for i : i32 = 0; i < screenWidth; i += 3
+			{
+				DrawPixel(i, mouseY, crosshairColor)
+			}
+
+			xPos : i32 = CandleList_IndexToPixelX(chart.candles[zoomIndex], cursorCandleIndex, scaleData) - cameraPosX
+			candleWidth : i32 = CandleList_IndexToWidth(chart.candles[zoomIndex], cursorCandleIndex, scaleData)
+
+			for i : i32 = 0; i < screenHeight; i += 3
+			{
+				DrawPixel(xPos + i32(f32(candleWidth) / 2 - 0.5), i, crosshairColor)
+			}
 		}
 
 		// Draw current price line
@@ -1321,7 +1416,7 @@ main :: proc()
 
 		// Highest Candle
 		if cursorCandleIndex != highestCandleIndex ||
-		   mouseSnapPrice != highestCandle.high
+		   cursorSnapPrice != highestCandle.high
 	    {
 			fmt.bprintf(textBuffer[:], "%.2f\x00", highestCandle.high)
 			textRect = MeasureTextEx(font, cstring(&textBuffer[0]), FONT_SIZE, 0)
@@ -1343,7 +1438,7 @@ main :: proc()
 
 		// Lowest Candle
 		if cursorCandleIndex != lowestCandleIndex ||
-		   mouseSnapPrice != lowestCandle.low
+		   cursorSnapPrice != lowestCandle.low
 	    {
 			fmt.bprintf(textBuffer[:], "%.2f\x00", lowestCandle.low)
 			textRect = MeasureTextEx(font, cstring(&textBuffer[0]), FONT_SIZE, 0)
@@ -1383,14 +1478,14 @@ main :: proc()
 		labelBackground := BLACK
 		labelBackground.a = 127
 
-		if isSnapped
+		if isCursorSnapped
 		{
-			fmt.bprintf(textBuffer[:], "%.2f\x00", mouseSnapPrice)
+			fmt.bprintf(textBuffer[:], "%.2f\x00", cursorSnapPrice)
 
 			width := MeasureTextEx(font, cstring(&textBuffer[0]), FONT_SIZE, 0).x + HORIZONTAL_LABEL_PADDING * 2
 
 			posX := f32(CandleList_IndexToPixelX(chart.candles[zoomIndex], cursorCandleIndex, scaleData) - cameraPosX) - width
-			posY := f32(Price_ToPixelY(mouseSnapPrice, scaleData) - cameraPosY) - f32(labelHeight) / 2
+			posY := f32(Price_ToPixelY(cursorSnapPrice, scaleData) - cameraPosY) - f32(labelHeight) / 2
 
 			if posX + HORIZONTAL_LABEL_PADDING < 0
 			{
