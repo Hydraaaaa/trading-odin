@@ -144,6 +144,9 @@ main :: proc()
 	selectedMultitool : ^Multitool
 	selectedMultitoolIndex : int
 
+	hoveredMultitool : ^Multitool
+	hoveredMultitoolIndex : int
+
 	dailyCloseLevels := CandleCloseLevels_Create(chart.candles[Timeframe.DAY], SKYBLUE)
 	defer CandleCloseLevels_Destroy(dailyCloseLevels)
 
@@ -286,6 +289,20 @@ main :: proc()
 			}
 		}
 
+		// TODO: Hover least recently selected multitool when multiple are hovered
+		hoveredMultitool = nil
+		hoveredMultitoolIndex = -1
+
+		for i in 0 ..< len(multitools)
+		{
+			if Multitool_IsOverlapping(multitools[i], GetMouseX() + cameraPosX, GetMouseY() + cameraPosY, scaleData)
+			{
+				hoveredMultitool = &multitools[i]
+				hoveredMultitoolIndex = i
+				break
+			}
+		}
+
 		// Camera Panning
 		if IsMouseButtonPressed(.LEFT)
 		{
@@ -350,19 +367,8 @@ main :: proc()
 		{
 			if panning && !hasPanned
 			{
-				selectedMultitool = nil
-				selectedMultitoolIndex = -1
-
-				// TODO: Select multitool not already selected if clicked same spot
-				for i in 0 ..< len(multitools)
-				{
-					if Multitool_IsOverlapping(multitools[i], GetMouseX() + cameraPosX, GetMouseY() + cameraPosY, scaleData)
-					{
-						selectedMultitool = &multitools[i]
-						selectedMultitoolIndex = i
-						break
-					}
-				}
+				selectedMultitool = hoveredMultitool
+				selectedMultitoolIndex = hoveredMultitoolIndex
 			}
 
 			panning = false
@@ -1354,6 +1360,16 @@ main :: proc()
 			width := Timestamp_ToPixelX(multitool.endTimestamp, scaleData) - startPixel
 			DrawVolumeProfile(startPixel - cameraPosX, width, cameraPosY, multitool.volumeProfile, scaleData, 63, true, false, false, false, false)
 			DrawVolumeProfile(startPixel - cameraPosX + width, width, cameraPosY, multitool.volumeProfile, scaleData, 191, false, true, true, true, true)
+		}
+
+		if hoveredMultitool != nil
+		{
+			// TODO: Change volumeProfileHigh/Low to fibHigh/Low
+			posX := Timestamp_ToPixelX(hoveredMultitool.startTimestamp, scaleData)
+			posY := Price_ToPixelY(hoveredMultitool.volumeProfileHigh, scaleData)
+			width := Timestamp_ToPixelX(hoveredMultitool.endTimestamp, scaleData) - posX
+			height := Price_ToPixelY(hoveredMultitool.volumeProfileLow, scaleData) - posY
+			DrawRectangleLines(posX - cameraPosX, posY - cameraPosY, width, height, {255, 255, 255, 63})
 		}
 
 		if selectedMultitool != nil
