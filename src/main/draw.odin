@@ -19,8 +19,8 @@ DrawVolumeProfile :: proc(posX : i32, width : i32, cameraPosY : i32, profile : V
             buyVolume := profile.buckets[bucketIndex].buyVolume
             totalVolume := profile.buckets[bucketIndex].buyVolume + profile.buckets[bucketIndex].sellVolume
 
-            bucketStartPixel := VolumeProfile_BucketToPixelY(profile, bucketIndex, scaleData) - cameraPosY
-            bucketEndPixel := VolumeProfile_BucketToPixelY(profile, bucketIndex + 1, scaleData) - cameraPosY
+            bucketStartPixel := VolumeProfile_BucketToPixelY(profile, bucketIndex, scaleData, true) - cameraPosY
+            bucketEndPixel := VolumeProfile_BucketToPixelY(profile, bucketIndex + 1, scaleData, true) - cameraPosY
 
             // If there are multiple buckets within one pixel, only draw the biggest
             for bucketStartPixel == bucketEndPixel &&
@@ -31,7 +31,7 @@ DrawVolumeProfile :: proc(posX : i32, width : i32, cameraPosY : i32, profile : V
                 buyVolume = math.max(buyVolume, profile.buckets[bucketIndex].buyVolume)
                 totalVolume = math.max(totalVolume, profile.buckets[bucketIndex].buyVolume + profile.buckets[bucketIndex].sellVolume)
 
-                bucketEndPixel = VolumeProfile_BucketToPixelY(profile, bucketIndex + 1, scaleData) - cameraPosY
+                bucketEndPixel = VolumeProfile_BucketToPixelY(profile, bucketIndex + 1, scaleData, true) - cameraPosY
             }
 
             bucketThickness := math.max(bucketStartPixel - bucketEndPixel, 1)
