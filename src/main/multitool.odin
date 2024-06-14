@@ -70,7 +70,7 @@ Multitool_IsOverlappingPoint :: proc(multitool : Multitool, posX : i32, posY : i
 
 	// If there are multiple buckets within one pixel, only draw the biggest
 	for currentBucketPixel == startBucketPixel &&
-		bucketIndex < len(multitool.volumeProfile.buckets)
+		bucketIndex < len(multitool.volumeProfile.buckets) - 1
 	{
 		bucketIndex += 1
 
