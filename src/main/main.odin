@@ -1369,7 +1369,7 @@ main :: proc()
 			posY := Price_ToPixelY(hoveredMultitool.volumeProfileHigh, scaleData)
 			width := Timestamp_ToPixelX(hoveredMultitool.endTimestamp, scaleData) - posX
 			height := Price_ToPixelY(hoveredMultitool.volumeProfileLow, scaleData) - posY
-			DrawRectangleLines(posX - cameraPosX, posY - cameraPosY, width, height, {255, 255, 255, 63})
+			DrawRectangleLines(posX - cameraPosX, posY - cameraPosY, width, height, {255, 255, 255, 127})
 		}
 
 		if selectedMultitool != nil
@@ -1379,7 +1379,7 @@ main :: proc()
 			posY := Price_ToPixelY(selectedMultitool.volumeProfileHigh, scaleData)
 			width := Timestamp_ToPixelX(selectedMultitool.endTimestamp, scaleData) - posX
 			height := Price_ToPixelY(selectedMultitool.volumeProfileLow, scaleData) - posY
-			DrawRectangleLines(posX - cameraPosX, posY - cameraPosY, width, height, {255, 255, 255, 127})
+			DrawRectangleLines(posX - cameraPosX, posY - cameraPosY, width, height, {255, 255, 255, 255})
 		}
 
 		// Draw Crosshair
