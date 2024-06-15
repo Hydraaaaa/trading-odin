@@ -41,13 +41,15 @@ VolumeProfileBucket :: struct
 
 // Around 1000x faster if bucketSize is a multiple of provided pool's bucketSize  
 // Must be freed with VolumeProfile_Destroy
-VolumeProfile_Create :: proc(startTimestamp : i32, endTimestamp : i32, high : f32, low : f32, chart : Chart, bucketSize : f32 = 5) -> VolumeProfile
+VolumeProfile_Create :: proc(startTimestamp : i32, endTimestamp : i32, chart : Chart, bucketSize : f32 = 5) -> VolumeProfile
 {
     if bucketSize <= 0
     {
         fmt.println("ERROR: VolumeProfile_Create called with invalid bucketSize")
         return VolumeProfile{}
     }
+
+    high, low := Chart_GetRangeHighAndLow(chart, startTimestamp, endTimestamp)
 
     // If bucketSize doesn't align with pool, revert to slower method
     if math.mod(bucketSize, f32(chart.hourVolumeProfilePool.bucketSize)) != 0
@@ -264,7 +266,7 @@ VolumeProfile_CreateFromCandles :: proc(candles : []Candle, high : f32, low : f3
 }
 
 // Leverage an existing volume profile to avoid recalculating its range
-VolumeProfile_Resize :: proc(profile : ^VolumeProfile, oldStartTimestamp : i32, oldEndTimestamp : i32, newStartTimestamp : i32, newEndTimestamp : i32, oldHigh : f32, oldLow : f32, newHigh : f32, newLow : f32, chart : Chart)
+VolumeProfile_Resize :: proc(profile : ^VolumeProfile, oldStartTimestamp : i32, oldEndTimestamp : i32, newStartTimestamp : i32, newEndTimestamp : i32, chart : Chart)
 {
     // If the new region doesn't overlap the old region, regenerate
     // If the new region is less than half the size of the old region, regenerate (less work than shrinking)
@@ -273,9 +275,12 @@ VolumeProfile_Resize :: proc(profile : ^VolumeProfile, oldStartTimestamp : i32, 
        newEndTimestamp - newStartTimestamp / 2 < oldEndTimestamp - oldStartTimestamp
     {
         delete(profile.buckets)
-        profile^ = VolumeProfile_Create(newStartTimestamp, newEndTimestamp, newHigh, newLow, chart, profile.bucketSize)
+        profile^ = VolumeProfile_Create(newStartTimestamp, newEndTimestamp, chart, profile.bucketSize)
         return
     }
+
+    oldHigh, oldLow := Chart_GetRangeHighAndLow(chart, oldStartTimestamp, oldEndTimestamp)
+    newHigh, newLow := Chart_GetRangeHighAndLow(chart, newStartTimestamp, newEndTimestamp)
 
     newBottomPrice := newLow - math.mod(newLow, profile.bucketSize)
     newTopPrice := newHigh - math.mod(newHigh, profile.bucketSize) + profile.bucketSize

@@ -347,10 +347,8 @@ main :: proc()
 
 				startIndex := CandleList_TimestampToIndex(chart.candles[rulerZoomIndex], newStartTimestamp)
 				endIndex := CandleList_TimestampToIndex(chart.candles[rulerZoomIndex], newEndTimestamp)
-				highCandle, _ := Candle_HighestHigh(chart.candles[rulerZoomIndex].candles[startIndex:endIndex])
-				lowCandle, _ := Candle_LowestLow(chart.candles[rulerZoomIndex].candles[startIndex:endIndex])
 
-				selectedMultitool.volumeProfile = VolumeProfile_Create(newStartTimestamp, newEndTimestamp, highCandle.high, lowCandle.low, chart, 25)
+				selectedMultitool.volumeProfile = VolumeProfile_Create(newStartTimestamp, newEndTimestamp, chart, 25)
 
 				selectedMultitool.startTimestamp = newStartTimestamp
 				selectedMultitool.endTimestamp = newEndTimestamp
@@ -415,10 +413,8 @@ main :: proc()
 
 			startIndex := CandleList_TimestampToIndex(chart.candles[rulerZoomIndex], newStartTimestamp)
 			endIndex := CandleList_TimestampToIndex(chart.candles[rulerZoomIndex], newEndTimestamp)
-			highCandle, _ := Candle_HighestHigh(chart.candles[rulerZoomIndex].candles[startIndex:endIndex])
-			lowCandle, _ := Candle_LowestLow(chart.candles[rulerZoomIndex].candles[startIndex:endIndex])
 
-			VolumeProfile_Resize(&selectedMultitool.volumeProfile, selectedMultitool.startTimestamp, selectedMultitool.endTimestamp, newStartTimestamp, newEndTimestamp, selectedMultitool.volumeProfileHigh, selectedMultitool.volumeProfileLow, highCandle.high, lowCandle.low, chart)
+			VolumeProfile_Resize(&selectedMultitool.volumeProfile, selectedMultitool.startTimestamp, selectedMultitool.endTimestamp, newStartTimestamp, newEndTimestamp, chart)
 
 			selectedMultitool.startTimestamp = newStartTimestamp
 			selectedMultitool.endTimestamp = newEndTimestamp
@@ -1273,7 +1269,7 @@ main :: proc()
 					startTimestamp := CandleList_IndexToTimestamp(chart.candles[Timeframe.WEEK], i32(i))
 					endTimestamp := CandleList_IndexToTimestamp(chart.candles[Timeframe.WEEK], i32(i) + 1)
 					weekCandle := chart.candles[Timeframe.WEEK].candles[i]
-					chart.weeklyVolumeProfiles[i] = VolumeProfile_Create(startTimestamp, endTimestamp, weekCandle.high, weekCandle.low, chart, 25)
+					chart.weeklyVolumeProfiles[i] = VolumeProfile_Create(startTimestamp, endTimestamp, chart, 25)
 				}
 
 				startPixel := CandleList_IndexToPixelX(chart.candles[Timeframe.WEEK], i32(i) + 1, scaleData)
@@ -1300,7 +1296,7 @@ main :: proc()
 					startTimestamp := CandleList_IndexToTimestamp(chart.candles[Timeframe.DAY], i32(i))
 					endTimestamp := CandleList_IndexToTimestamp(chart.candles[Timeframe.DAY], i32(i) + 1)
 					dayCandle := chart.candles[Timeframe.DAY].candles[i]
-					chart.dailyVolumeProfiles[i] = VolumeProfile_Create(startTimestamp, endTimestamp, dayCandle.high, dayCandle.low, chart, 25)
+					chart.dailyVolumeProfiles[i] = VolumeProfile_Create(startTimestamp, endTimestamp, chart, 25)
 				}
 
 				startPixel := CandleList_IndexToPixelX(chart.candles[Timeframe.DAY], i32(i) + 1, scaleData)

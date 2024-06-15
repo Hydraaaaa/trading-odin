@@ -1,5 +1,8 @@
 package main
 
+import "core:fmt"
+import "core:math"
+
 CANDLE_TIMEFRAME_INCREMENTS : [10]i32 : {60, 300, 900, 1800, 3600, 10_800, 21_600, 43_200, 86_400, 604_800}
 
 TIMEFRAME_COUNT :: 11
@@ -123,4 +126,42 @@ Chart_CreateHTFCandles :: proc(chart : ^Chart)
         append(&chart.candles[Timeframe.MONTH].candles, Candle_Merge(..dayCandles[start:dayCandlesLen]))
         append(&chart.candles[Timeframe.MONTH].cumulativeDelta, dayDelta[dayCandlesLen - 1])
     }
+}
+
+// Does not consider month timeframes  
+// (VolumeProfile_CreateBuckets is simplified as a result)
+Chart_TimestampToTimeframe :: proc(chart : Chart, timestamp : i32) -> Timeframe
+{
+	timeframeIncrements := CANDLE_TIMEFRAME_INCREMENTS
+    currentTimeframe := i32(Timeframe.WEEK)
+
+    for (timestamp - chart.candles[currentTimeframe].offset) % timeframeIncrements[currentTimeframe] != 0 &&
+        currentTimeframe > 0
+    {
+        currentTimeframe -= 1
+    }
+
+    return Timeframe(currentTimeframe)
+}
+
+Chart_GetRangeHighAndLow :: proc(chart : Chart, startTimestamp : i32, endTimestamp : i32) -> (f32, f32)
+{
+    // Determine the range's highest and lowest prices
+    candleTimeframe := math.min(Chart_TimestampToTimeframe(chart, startTimestamp), Chart_TimestampToTimeframe(chart, endTimestamp))
+
+    candlesStartIndex := CandleList_TimestampToIndex(chart.candles[candleTimeframe], startTimestamp)
+    candlesEndIndex := CandleList_TimestampToIndex(chart.candles[candleTimeframe], endTimestamp)
+
+    capturedCandles := chart.candles[candleTimeframe].candles[candlesStartIndex:candlesEndIndex]
+
+    high := capturedCandles[0].high
+    low := capturedCandles[0].low
+
+    for candle in capturedCandles[1:]
+    {
+        high = math.max(high, candle.high)
+        low = math.min(low, candle.low)
+    }
+
+    return high, low
 }
