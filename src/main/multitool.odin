@@ -3,17 +3,40 @@ package main
 import "core:fmt"
 import "core:math"
 
+import "vendor:raylib"
+
+FIB_LEVELS :: [2]FibLevel{{0.618, raylib.Color{255, 255, 127, 255}, true}, {0.382, raylib.Color{127, 255, 127, 255}, false}}
+
 Multitool :: struct
 {
 	startTimestamp : i32,
 	endTimestamp : i32,
+	high : f32,
+	low  : f32,
 
     volumeProfile : VolumeProfile,
-	volumeProfileHigh : f32,
-	volumeProfileLow : f32,
 
-	fibHigh : f32,
-	fibLow : f32,
+	fibLevels : [2]FibLevel,
+	isUpsideDown : bool,
+}
+
+FibLevel :: struct
+{
+	level : f32,
+	color : raylib.Color,
+	enabled : bool,
+}
+
+DragDirection :: enum
+{
+	NONE,
+	TOPLEFT,
+	TOP,
+	TOPRIGHT,
+	LEFT,
+	RIGHT,
+	BOTTOMLEFT,
+	BOTTOMRIGHT,
 }
 
 Multitool_Destroy :: proc(multitool : Multitool)
@@ -92,9 +115,44 @@ Multitool_IsOverlappingRect :: proc(multitool : Multitool, posX : i32, posY : i3
 	high := Price_FromPixelY(posY, scaleData)
 	low := Price_FromPixelY(posY + height, scaleData)
 
+	profileHigh := multitool.volumeProfile.bottomPrice + f32(len(multitool.volumeProfile.buckets)) * multitool.volumeProfile.bucketSize
+	profileLow := multitool.volumeProfile.bottomPrice
+
 	// TODO: Depends on if VolumeProfile is active
-	return multitool.volumeProfileHigh >= low &&
-	       multitool.volumeProfileLow <= high &&
+	return profileHigh >= low &&
+	       profileLow <= high &&
 	       multitool.startTimestamp <= endTimestamp &&
 	       multitool.endTimestamp + (multitool.endTimestamp - multitool.startTimestamp) >= startTimestamp
+}
+
+Multitool_Draw :: proc(multitool : Multitool, cameraPosX : i32, cameraPosY : i32, scaleData : ScaleData)
+{
+	startPixel := Timestamp_ToPixelX(multitool.startTimestamp, scaleData)
+	width := Timestamp_ToPixelX(multitool.endTimestamp, scaleData) - startPixel
+	VolumeProfile_Draw(multitool.volumeProfile, startPixel - cameraPosX, width, cameraPosY, scaleData, 63, true, false, false, false, false)
+	VolumeProfile_Draw(multitool.volumeProfile, startPixel - cameraPosX + width, width, cameraPosY, scaleData, 191, false, true, true, true, true)
+
+	range := multitool.high - multitool.low
+
+	fibStartPixel := startPixel + width - cameraPosX
+	fibEndPixel := startPixel + width + width - cameraPosX
+
+	for fib in multitool.fibLevels
+	{
+		if fib.enabled
+		{
+			pixelY : i32 = ---
+
+			if multitool.isUpsideDown
+			{
+				pixelY = Price_ToPixelY(range * (1 - fib.level) + multitool.low, scaleData) - cameraPosY
+			}
+			else
+			{
+				pixelY = Price_ToPixelY(range * fib.level + multitool.low, scaleData) - cameraPosY
+			}
+
+			raylib.DrawLine(fibStartPixel, pixelY, fibEndPixel, pixelY, fib.color)
+		}
+	}
 }

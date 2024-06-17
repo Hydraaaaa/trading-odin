@@ -134,6 +134,7 @@ main :: proc()
 
 	dragStartCandleIndex : i32
 	dragStartZoomIndex : Timeframe
+	dragStartPrice : f32
 
 	multitools : [dynamic]Multitool
 	defer for multitool in multitools
@@ -311,6 +312,8 @@ main :: proc()
 		{
 			dragStartCandleIndex = cursorCandleIndex
 			dragStartZoomIndex = zoomIndex
+			dragStartPrice = cursorSnapPrice
+
 			if !IsKeyDown(.LEFT_SHIFT)
 			{
 				panning = true
@@ -322,6 +325,8 @@ main :: proc()
 				append(&multitools, Multitool{})
 				selectedMultitool = &multitools[len(multitools) - 1]
 				selectedMultitoolIndex = len(multitools) - 1
+
+				selectedMultitool.fibLevels = FIB_LEVELS
 
 				newStartTimestamp : i32
 				newEndTimestamp : i32
@@ -355,12 +360,9 @@ main :: proc()
 
 				selectedMultitool.startTimestamp = newStartTimestamp
 				selectedMultitool.endTimestamp = newEndTimestamp
-
-				selectedMultitool.volumeProfileHigh = selectedMultitool.volumeProfile.bottomPrice + f32(len(selectedMultitool.volumeProfile.buckets)) * selectedMultitool.volumeProfile.bucketSize
-				selectedMultitool.volumeProfileLow = selectedMultitool.volumeProfile.bottomPrice
-
-				//selectedMultitool.fibHigh = 
-				//selectedMultitool.fibLow = 
+				selectedMultitool.high = math.max(dragStartPrice, cursorSnapPrice)
+				selectedMultitool.low = math.min(dragStartPrice, cursorSnapPrice)
+				selectedMultitool.isUpsideDown = dragStartPrice < cursorSnapPrice
 			}
 		}
 
@@ -387,7 +389,8 @@ main :: proc()
 		}
 
 		if dragging &&
-		   GetMouseDelta().x != 0
+		   (GetMouseDelta().x != 0 ||
+		    GetMouseDelta().y != 0)
 		{
 			newStartTimestamp : i32
 			newEndTimestamp : i32
@@ -421,12 +424,9 @@ main :: proc()
 
 			selectedMultitool.startTimestamp = newStartTimestamp
 			selectedMultitool.endTimestamp = newEndTimestamp
-
-			selectedMultitool.volumeProfileHigh = selectedMultitool.volumeProfile.bottomPrice + f32(len(selectedMultitool.volumeProfile.buckets)) * selectedMultitool.volumeProfile.bucketSize
-			selectedMultitool.volumeProfileLow = selectedMultitool.volumeProfile.bottomPrice
-
-			//selectedMultitool.fibHigh = 
-			//selectedMultitool.fibLow = 
+			selectedMultitool.high = math.max(dragStartPrice, cursorSnapPrice)
+			selectedMultitool.low = math.min(dragStartPrice, cursorSnapPrice)
+			selectedMultitool.isUpsideDown = dragStartPrice < cursorSnapPrice
 		}
 
 		// Vertical Scale Adjustment
@@ -655,6 +655,10 @@ main :: proc()
 				}
 
 				isCursorSnapped = true
+			}
+			else
+			{
+				cursorSnapPrice = Price_FromPixelY(mouseY + cameraPosY, scaleData)
 			}
 		}
 
@@ -1214,7 +1218,7 @@ main :: proc()
 			width := Timestamp_ToPixelX(multitool.endTimestamp, scaleData) - startPixel
 			if Multitool_IsOverlappingRect(multitool, cameraPosX, cameraPosY, screenWidth, screenHeight, scaleData)
 			{
-				DrawVolumeProfile(startPixel - cameraPosX, width, cameraPosY, multitool.volumeProfile, scaleData, 100, true, false, false, false, false)
+				VolumeProfile_Draw(multitool.volumeProfile, startPixel - cameraPosX, width, cameraPosY, scaleData, 100, true, false, false, false, false)
 			}
 		}
 
@@ -1278,7 +1282,7 @@ main :: proc()
 				startPixel := CandleList_IndexToPixelX(chart.candles[Timeframe.WEEK], i32(i) + 1, scaleData)
 				endPixel := CandleList_IndexToPixelX(chart.candles[Timeframe.WEEK], i32(i) + 2, scaleData)
 
-				DrawVolumeProfile(startPixel - cameraPosX, endPixel - startPixel, cameraPosY, chart.weeklyVolumeProfiles[i], scaleData, 95, false, true, true, true, true)
+				VolumeProfile_Draw(chart.weeklyVolumeProfiles[i], startPixel - cameraPosX, endPixel - startPixel, cameraPosY, scaleData, 95, false, true, true, true, true)
 			}
 		}
 
@@ -1305,7 +1309,7 @@ main :: proc()
 				startPixel := CandleList_IndexToPixelX(chart.candles[Timeframe.DAY], i32(i) + 1, scaleData)
 				endPixel := CandleList_IndexToPixelX(chart.candles[Timeframe.DAY], i32(i) + 2, scaleData)
 
-				DrawVolumeProfile(startPixel - cameraPosX, endPixel - startPixel, cameraPosY, chart.dailyVolumeProfiles[i], scaleData, 63, false, true, true, true, true)
+				VolumeProfile_Draw(chart.dailyVolumeProfiles[i], startPixel - cameraPosX, endPixel - startPixel, cameraPosY, scaleData, 63, false, true, true, true, true)
 			}
 		}
 
@@ -1355,29 +1359,24 @@ main :: proc()
 
 		for multitool in multitools
 		{
-			startPixel := Timestamp_ToPixelX(multitool.startTimestamp, scaleData)
-			width := Timestamp_ToPixelX(multitool.endTimestamp, scaleData) - startPixel
-			DrawVolumeProfile(startPixel - cameraPosX, width, cameraPosY, multitool.volumeProfile, scaleData, 63, true, false, false, false, false)
-			DrawVolumeProfile(startPixel - cameraPosX + width, width, cameraPosY, multitool.volumeProfile, scaleData, 191, false, true, true, true, true)
+			Multitool_Draw(multitool, cameraPosX, cameraPosY, scaleData)
 		}
 
 		if hoveredMultitool != nil
 		{
-			// TODO: Change volumeProfileHigh/Low to fibHigh/Low
 			posX := Timestamp_ToPixelX(hoveredMultitool.startTimestamp, scaleData)
-			posY := Price_ToPixelY(hoveredMultitool.volumeProfileHigh, scaleData)
+			posY := Price_ToPixelY(hoveredMultitool.high, scaleData)
 			width := Timestamp_ToPixelX(hoveredMultitool.endTimestamp, scaleData) - posX
-			height := Price_ToPixelY(hoveredMultitool.volumeProfileLow, scaleData) - posY
+			height := Price_ToPixelY(hoveredMultitool.low, scaleData) - posY
 			DrawRectangleLines(posX - cameraPosX, posY - cameraPosY, width, height, {255, 255, 255, 127})
 		}
 
 		if selectedMultitool != nil
 		{
-			// TODO: Change volumeProfileHigh/Low to fibHigh/Low
 			posX := Timestamp_ToPixelX(selectedMultitool.startTimestamp, scaleData)
-			posY := Price_ToPixelY(selectedMultitool.volumeProfileHigh, scaleData)
+			posY := Price_ToPixelY(selectedMultitool.high, scaleData)
 			width := Timestamp_ToPixelX(selectedMultitool.endTimestamp, scaleData) - posX
-			height := Price_ToPixelY(selectedMultitool.volumeProfileLow, scaleData) - posY
+			height := Price_ToPixelY(selectedMultitool.low, scaleData) - posY
 			DrawRectangleLines(posX - cameraPosX, posY - cameraPosY, width, height, {255, 255, 255, 255})
 		}
 
