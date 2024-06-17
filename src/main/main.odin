@@ -303,6 +303,9 @@ main :: proc()
 			}
 		}
 
+		// Set cursor to pointing hand when hovering something
+		SetMouseCursor(MouseCursor(4 * i32(hoveredMultitool != nil)))
+
 		// Camera Panning
 		if IsMouseButtonPressed(.LEFT)
 		{
