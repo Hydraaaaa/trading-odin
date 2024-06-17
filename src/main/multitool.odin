@@ -27,16 +27,17 @@ FibLevel :: struct
 	enabled : bool,
 }
 
-DragDirection :: enum
+Edge :: enum
 {
-	NONE,
-	TOPLEFT,
-	TOP,
-	TOPRIGHT,
-	LEFT,
-	RIGHT,
-	BOTTOMLEFT,
-	BOTTOMRIGHT,
+	NONE = 0,
+	TOPLEFT = 1,
+	TOP = 2,
+	TOPRIGHT = 3,
+	LEFT = 4,
+	RIGHT = 5,
+	BOTTOMLEFT = 6,
+	BOTTOM = 7,
+	BOTTOMRIGHT = 8,
 }
 
 Multitool_Destroy :: proc(multitool : Multitool)
@@ -123,6 +124,84 @@ Multitool_IsOverlappingRect :: proc(multitool : Multitool, posX : i32, posY : i3
 	       profileLow <= high &&
 	       multitool.startTimestamp <= endTimestamp &&
 	       multitool.endTimestamp + (multitool.endTimestamp - multitool.startTimestamp) >= startTimestamp
+}
+
+Multitool_GetOverlappingEdge :: proc(multitool : Multitool, posX : i32, posY : i32, scaleData : ScaleData) -> Edge
+{
+	EDGE_THICKNESS :: 2
+
+	leftPos := Timestamp_ToPixelX(multitool.startTimestamp, scaleData)
+	rightPos := Timestamp_ToPixelX(multitool.endTimestamp, scaleData)
+	topPos := Price_ToPixelY(multitool.high, scaleData)
+	bottomPos := Price_ToPixelY(multitool.low, scaleData)
+
+	// Corners
+	if posX >= leftPos - EDGE_THICKNESS &&
+	   posX <= leftPos + EDGE_THICKNESS &&
+	   posY >= topPos - EDGE_THICKNESS &&
+	   posY <= topPos + EDGE_THICKNESS
+	{
+		return .TOPLEFT
+	}
+
+	if posX >= rightPos - EDGE_THICKNESS &&
+	   posX <= rightPos + EDGE_THICKNESS &&
+	   posY >= topPos - EDGE_THICKNESS &&
+	   posY <= topPos + EDGE_THICKNESS
+	{
+		return .TOPRIGHT
+	}
+
+	if posX >= leftPos - EDGE_THICKNESS &&
+	   posX <= leftPos + EDGE_THICKNESS &&
+	   posY >= bottomPos - EDGE_THICKNESS &&
+	   posY <= bottomPos + EDGE_THICKNESS
+	{
+		return .BOTTOMLEFT
+	}
+
+	if posX >= rightPos - EDGE_THICKNESS &&
+	   posX <= rightPos + EDGE_THICKNESS &&
+	   posY >= bottomPos - EDGE_THICKNESS &&
+	   posY <= bottomPos + EDGE_THICKNESS
+	{
+		return .BOTTOMRIGHT
+	}
+
+	// Edges
+	if posX >= leftPos - EDGE_THICKNESS &&
+	   posX <= rightPos + EDGE_THICKNESS &&
+	   posY >= topPos - EDGE_THICKNESS &&
+	   posY <= topPos + EDGE_THICKNESS
+	{
+		return .TOP
+	}
+
+	if posX >= leftPos - EDGE_THICKNESS &&
+	   posX <= leftPos + EDGE_THICKNESS &&
+	   posY >= topPos - EDGE_THICKNESS &&
+	   posY <= bottomPos + EDGE_THICKNESS
+	{
+		return .LEFT
+	}
+
+	if posX >= rightPos - EDGE_THICKNESS &&
+	   posX <= rightPos + EDGE_THICKNESS &&
+	   posY >= topPos - EDGE_THICKNESS &&
+	   posY <= bottomPos + EDGE_THICKNESS
+	{
+		return .RIGHT
+	}
+
+	if posX >= leftPos - EDGE_THICKNESS &&
+	   posX <= rightPos + EDGE_THICKNESS &&
+	   posY >= bottomPos - EDGE_THICKNESS &&
+	   posY <= bottomPos + EDGE_THICKNESS
+	{
+		return .BOTTOM
+	}
+
+	return .NONE
 }
 
 Multitool_Draw :: proc(multitool : Multitool, cameraPosX : i32, cameraPosY : i32, scaleData : ScaleData)

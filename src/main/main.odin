@@ -290,22 +290,34 @@ main :: proc()
 			}
 		}
 
+		hoveredEdge := Edge.NONE
+
+		if selectedMultitool != nil && !dragging
+		{
+			hoveredEdge = Multitool_GetOverlappingEdge(selectedMultitool^, GetMouseX() + cameraPosX, GetMouseY() + cameraPosY, scaleData)
+		}
+
 		// TODO: Hover least recently selected multitool when multiple are hovered
 		hoveredMultitool = nil
 		hoveredMultitoolIndex = -1
 
-		for i in 0 ..< len(multitools)
+		if hoveredEdge == .NONE
 		{
-			if Multitool_IsOverlapping(multitools[i], GetMouseX() + cameraPosX, GetMouseY() + cameraPosY, scaleData)
+			for i in 0 ..< len(multitools)
 			{
-				hoveredMultitool = &multitools[i]
-				hoveredMultitoolIndex = i
-				break
+				if Multitool_IsOverlapping(multitools[i], GetMouseX() + cameraPosX, GetMouseY() + cameraPosY, scaleData)
+				{
+					hoveredMultitool = &multitools[i]
+					hoveredMultitoolIndex = i
+					break
+				}
 			}
 		}
 
-		// Set cursor to pointing hand when hovering something
-		SetMouseCursor(MouseCursor(4 * i32(hoveredMultitool != nil && !dragging)))
+		hoverCursors := [9]MouseCursor{.DEFAULT, .RESIZE_NWSE, .RESIZE_NS, .RESIZE_NESW, .RESIZE_EW, .RESIZE_EW, .RESIZE_NESW, .RESIZE_NS, .RESIZE_NWSE}
+
+		// Set cursor based on the hoverCursors map, or if a multitool is being hovered, set cursor to pointing hand
+		SetMouseCursor(hoverCursors[hoveredEdge] + .POINTING_HAND * MouseCursor(hoveredMultitool != nil && !dragging))
 
 		// Camera Panning
 		if IsMouseButtonPressed(.LEFT)
