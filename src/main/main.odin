@@ -303,7 +303,8 @@ main :: proc()
 
 		if hoveredEdge == .NONE
 		{
-			for i in 0 ..< len(multitools)
+			// Reverse order to match visual order
+			for i := len(multitools) - 1; i >= 0; i -= 1
 			{
 				if Multitool_IsOverlapping(multitools[i], GetMouseX() + cameraPosX, GetMouseY() + cameraPosY, scaleData)
 				{
