@@ -128,7 +128,7 @@ Multitool_IsOverlappingRect :: proc(multitool : Multitool, posX : i32, posY : i3
 
 Multitool_GetOverlappingEdge :: proc(multitool : Multitool, posX : i32, posY : i32, scaleData : ScaleData) -> Edge
 {
-	EDGE_THICKNESS :: 2
+	EDGE_THICKNESS :: 3
 
 	leftPos := Timestamp_ToPixelX(multitool.startTimestamp, scaleData)
 	rightPos := Timestamp_ToPixelX(multitool.endTimestamp, scaleData)

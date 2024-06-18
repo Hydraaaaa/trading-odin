@@ -22,6 +22,15 @@ VERTICAL_LABEL_PADDING :: HORIZONTAL_LABEL_PADDING - 2
 
 FONT_SIZE :: 14
 
+CursorState :: enum
+{
+	NONE,
+	PAN,
+	DRAG_HORIZONTAL,
+	DRAG_VERTICAL,
+	DRAG_DIAGONAL,
+}
+
 main :: proc()
 {
 	using raylib
@@ -126,15 +135,15 @@ main :: proc()
 	zoomLevel := 0
 	verticalZoomLevel : f32 = 0
 
-	panning := false
-	dragging := false
-	hasPanned := false
+	mouseState := CursorState.NONE
+	mouseStateHasMoved := false
+	mouseStateStartCandleIndex : i32
+	mouseStateStartZoomIndex : Timeframe
+	mouseStateStartPrice : f32
+
+
 	rightDragging := false
 	rightDraggingPriceStart : f32
-
-	dragStartCandleIndex : i32
-	dragStartZoomIndex : Timeframe
-	dragStartPrice : f32
 
 	multitools : [dynamic]Multitool
 	defer for multitool in multitools
@@ -292,7 +301,7 @@ main :: proc()
 
 		hoveredEdge := Edge.NONE
 
-		if selectedMultitool != nil && !dragging
+		if selectedMultitool != nil && mouseState == .NONE
 		{
 			hoveredEdge = Multitool_GetOverlappingEdge(selectedMultitool^, GetMouseX() + cameraPosX, GetMouseY() + cameraPosY, scaleData)
 		}
@@ -317,24 +326,79 @@ main :: proc()
 
 		hoverCursors := [9]MouseCursor{.DEFAULT, .RESIZE_NWSE, .RESIZE_NS, .RESIZE_NESW, .RESIZE_EW, .RESIZE_EW, .RESIZE_NESW, .RESIZE_NS, .RESIZE_NWSE}
 
-		// Set cursor based on the hoverCursors map, or if a multitool is being hovered, set cursor to pointing hand
-		SetMouseCursor(hoverCursors[hoveredEdge] + .POINTING_HAND * MouseCursor(hoveredMultitool != nil && !dragging))
+		cursor := hoverCursors[hoveredEdge]
 
-		// Camera Panning
+		// If a multitool is being hovered, and the mouse isn't being dragged, set cursor to pointing hand
+		cursor += .POINTING_HAND * MouseCursor(hoveredMultitool != nil && (mouseState == .NONE || !mouseStateHasMoved))
+
 		if IsMouseButtonPressed(.LEFT)
 		{
-			dragStartCandleIndex = cursorCandleIndex
-			dragStartZoomIndex = zoomIndex
-			dragStartPrice = cursorSnapPrice
+			mouseStateHasMoved = false
+
+			mouseStateStartCandleIndex = cursorCandleIndex
+			mouseStateStartZoomIndex = zoomIndex
+			mouseStateStartPrice = cursorSnapPrice
 
 			if !IsKeyDown(.LEFT_SHIFT)
 			{
-				panning = true
-				hasPanned = false
+				switch hoveredEdge
+				{
+					case .TOPLEFT:
+					{
+						mouseState = .DRAG_DIAGONAL
+						mouseStateStartPrice = selectedMultitool.low
+						mouseStateStartZoomIndex = Chart_TimestampToTimeframe(chart, selectedMultitool.endTimestamp)
+						mouseStateStartCandleIndex = CandleList_TimestampToIndex(chart.candles[mouseStateStartZoomIndex], selectedMultitool.endTimestamp)
+					}
+					case .TOPRIGHT:
+					{
+						mouseState = .DRAG_DIAGONAL
+						mouseStateStartPrice = selectedMultitool.low
+						mouseStateStartZoomIndex = Chart_TimestampToTimeframe(chart, selectedMultitool.startTimestamp)
+						mouseStateStartCandleIndex = CandleList_TimestampToIndex(chart.candles[mouseStateStartZoomIndex], selectedMultitool.startTimestamp)
+					}
+					case .BOTTOMLEFT:
+					{
+						mouseState = .DRAG_DIAGONAL
+						mouseStateStartPrice = selectedMultitool.high
+						mouseStateStartZoomIndex = Chart_TimestampToTimeframe(chart, selectedMultitool.endTimestamp)
+						mouseStateStartCandleIndex = CandleList_TimestampToIndex(chart.candles[mouseStateStartZoomIndex], selectedMultitool.endTimestamp)
+					}
+					case .BOTTOMRIGHT:
+					{
+						mouseState = .DRAG_DIAGONAL
+						mouseStateStartPrice = selectedMultitool.high
+						mouseStateStartZoomIndex = Chart_TimestampToTimeframe(chart, selectedMultitool.startTimestamp)
+						mouseStateStartCandleIndex = CandleList_TimestampToIndex(chart.candles[mouseStateStartZoomIndex], selectedMultitool.startTimestamp)
+					}
+					case .TOP:
+					{
+						mouseState = .DRAG_VERTICAL
+						mouseStateStartPrice = selectedMultitool.low
+					}
+					case .LEFT:
+					{
+						mouseState = .DRAG_HORIZONTAL
+						mouseStateStartZoomIndex = Chart_TimestampToTimeframe(chart, selectedMultitool.endTimestamp)
+						mouseStateStartCandleIndex = CandleList_TimestampToIndex(chart.candles[mouseStateStartZoomIndex], selectedMultitool.endTimestamp)
+					}
+					case .RIGHT:
+					{
+						mouseState = .DRAG_HORIZONTAL
+						mouseStateStartZoomIndex = Chart_TimestampToTimeframe(chart, selectedMultitool.startTimestamp)
+						mouseStateStartCandleIndex = CandleList_TimestampToIndex(chart.candles[mouseStateStartZoomIndex], selectedMultitool.startTimestamp)
+					}
+					case .BOTTOM:
+					{
+						mouseState = .DRAG_VERTICAL
+						mouseStateStartPrice = selectedMultitool.high
+					}
+					case .NONE: mouseState = .PAN
+				}
 			}
 			else
 			{
-				dragging = true
+				mouseState = .DRAG_DIAGONAL
 				append(&multitools, Multitool{})
 				selectedMultitool = &multitools[len(multitools) - 1]
 				selectedMultitoolIndex = len(multitools) - 1
@@ -344,26 +408,26 @@ main :: proc()
 				newStartTimestamp : i32
 				newEndTimestamp : i32
 
-				if CandleList_IndexToTimestamp(chart.candles[dragStartZoomIndex], dragStartCandleIndex) > CandleList_IndexToTimestamp(chart.candles[zoomIndex], cursorCandleIndex)
+				if CandleList_IndexToTimestamp(chart.candles[mouseStateStartZoomIndex], mouseStateStartCandleIndex) > CandleList_IndexToTimestamp(chart.candles[zoomIndex], cursorCandleIndex)
 				{
 					newStartTimestamp = CandleList_IndexToTimestamp(chart.candles[zoomIndex], cursorCandleIndex)
-					newEndTimestamp = CandleList_IndexToTimestamp(chart.candles[dragStartZoomIndex], dragStartCandleIndex + 1)
+					newEndTimestamp = CandleList_IndexToTimestamp(chart.candles[mouseStateStartZoomIndex], mouseStateStartCandleIndex + 1)
 				}
 				else
 				{
-					newStartTimestamp = CandleList_IndexToTimestamp(chart.candles[dragStartZoomIndex], dragStartCandleIndex)
+					newStartTimestamp = CandleList_IndexToTimestamp(chart.candles[mouseStateStartZoomIndex], mouseStateStartCandleIndex)
 					newEndTimestamp = CandleList_IndexToTimestamp(chart.candles[zoomIndex], cursorCandleIndex + 1)
 				}
 
 				rulerZoomIndex : Timeframe
 
-				if dragStartZoomIndex > zoomIndex
+				if mouseStateStartZoomIndex > zoomIndex
 				{
 					rulerZoomIndex = zoomIndex
 				}
 				else
 				{
-					rulerZoomIndex = dragStartZoomIndex
+					rulerZoomIndex = mouseStateStartZoomIndex
 				}
 
 				startIndex := CandleList_TimestampToIndex(chart.candles[rulerZoomIndex], newStartTimestamp)
@@ -373,74 +437,138 @@ main :: proc()
 
 				selectedMultitool.startTimestamp = newStartTimestamp
 				selectedMultitool.endTimestamp = newEndTimestamp
-				selectedMultitool.high = math.max(dragStartPrice, cursorSnapPrice)
-				selectedMultitool.low = math.min(dragStartPrice, cursorSnapPrice)
-				selectedMultitool.isUpsideDown = dragStartPrice < cursorSnapPrice
+				selectedMultitool.high = math.max(mouseStateStartPrice, cursorSnapPrice)
+				selectedMultitool.low = math.min(mouseStateStartPrice, cursorSnapPrice)
+				selectedMultitool.isUpsideDown = mouseStateStartPrice < cursorSnapPrice
 			}
 		}
 
 		if IsMouseButtonReleased(.LEFT)
 		{
-			if panning && !hasPanned
+			if mouseState == .PAN && !mouseStateHasMoved
 			{
 				selectedMultitool = hoveredMultitool
 				selectedMultitoolIndex = hoveredMultitoolIndex
 			}
 
-			panning = false
-			dragging = false
+			mouseState = .NONE
+			mouseStateHasMoved = false
 		}
 
-		if panning &&
-		   (GetMouseDelta().x != 0 ||
-		    GetMouseDelta().y != 0)
+		cursorDelta := GetMouseDelta()
+
+		switch mouseState
 		{
-			hasPanned = true
+			// An XOR to determine which of the two diagonal cursors to display
+			case .DRAG_DIAGONAL: cursor = .RESIZE_NESW - MouseCursor((cursorCandleIndex > mouseStateStartCandleIndex) != (cursorSnapPrice > mouseStateStartPrice))
 
-			cameraPosX -= i32(GetMouseDelta().x)
-			cameraPosY -= i32(GetMouseDelta().y)
+			case .DRAG_HORIZONTAL: cursor = .RESIZE_EW
+			case .DRAG_VERTICAL: cursor = .RESIZE_NS
+
+			case .PAN:
+			case .NONE:
 		}
 
-		if dragging &&
-		   (GetMouseDelta().x != 0 ||
-		    GetMouseDelta().y != 0)
+		if cursorDelta.x != 0 ||
+		   cursorDelta.y != 0
 		{
-			newStartTimestamp : i32
-			newEndTimestamp : i32
+			mouseStateHasMoved = true
 
-			if CandleList_IndexToTimestamp(chart.candles[dragStartZoomIndex], dragStartCandleIndex) > CandleList_IndexToTimestamp(chart.candles[zoomIndex], cursorCandleIndex)
+			switch mouseState
 			{
-				newStartTimestamp = CandleList_IndexToTimestamp(chart.candles[zoomIndex], cursorCandleIndex)
-				newEndTimestamp = CandleList_IndexToTimestamp(chart.candles[dragStartZoomIndex], dragStartCandleIndex + 1)
+				case .PAN:
+				{
+					mouseStateHasMoved = true
+
+					cameraPosX -= i32(cursorDelta.x)
+					cameraPosY -= i32(cursorDelta.y)
+				}
+				case .DRAG_DIAGONAL:
+				{
+					newStartTimestamp : i32
+					newEndTimestamp : i32
+
+					if CandleList_IndexToTimestamp(chart.candles[mouseStateStartZoomIndex], mouseStateStartCandleIndex) > CandleList_IndexToTimestamp(chart.candles[zoomIndex], cursorCandleIndex)
+					{
+						newStartTimestamp = CandleList_IndexToTimestamp(chart.candles[zoomIndex], cursorCandleIndex)
+						newEndTimestamp = CandleList_IndexToTimestamp(chart.candles[mouseStateStartZoomIndex], mouseStateStartCandleIndex + 1)
+					}
+					else
+					{
+						newStartTimestamp = CandleList_IndexToTimestamp(chart.candles[mouseStateStartZoomIndex], mouseStateStartCandleIndex)
+						newEndTimestamp = CandleList_IndexToTimestamp(chart.candles[zoomIndex], cursorCandleIndex + 1)
+					}
+
+					rulerZoomIndex : Timeframe
+
+					if mouseStateStartZoomIndex > zoomIndex
+					{
+						rulerZoomIndex = zoomIndex
+					}
+					else
+					{
+						rulerZoomIndex = mouseStateStartZoomIndex
+					}
+
+					startIndex := CandleList_TimestampToIndex(chart.candles[rulerZoomIndex], newStartTimestamp)
+					endIndex := CandleList_TimestampToIndex(chart.candles[rulerZoomIndex], newEndTimestamp)
+
+					VolumeProfile_Resize(&selectedMultitool.volumeProfile, selectedMultitool.startTimestamp, selectedMultitool.endTimestamp, newStartTimestamp, newEndTimestamp, chart)
+
+					selectedMultitool.startTimestamp = newStartTimestamp
+					selectedMultitool.endTimestamp = newEndTimestamp
+					selectedMultitool.high = math.max(mouseStateStartPrice, cursorSnapPrice)
+					selectedMultitool.low = math.min(mouseStateStartPrice, cursorSnapPrice)
+					selectedMultitool.isUpsideDown = mouseStateStartPrice < cursorSnapPrice
+				}
+				case .DRAG_HORIZONTAL:
+				{
+					newStartTimestamp : i32
+					newEndTimestamp : i32
+
+					if CandleList_IndexToTimestamp(chart.candles[mouseStateStartZoomIndex], mouseStateStartCandleIndex) > CandleList_IndexToTimestamp(chart.candles[zoomIndex], cursorCandleIndex)
+					{
+						newStartTimestamp = CandleList_IndexToTimestamp(chart.candles[zoomIndex], cursorCandleIndex)
+						newEndTimestamp = CandleList_IndexToTimestamp(chart.candles[mouseStateStartZoomIndex], mouseStateStartCandleIndex + 1)
+					}
+					else
+					{
+						newStartTimestamp = CandleList_IndexToTimestamp(chart.candles[mouseStateStartZoomIndex], mouseStateStartCandleIndex)
+						newEndTimestamp = CandleList_IndexToTimestamp(chart.candles[zoomIndex], cursorCandleIndex + 1)
+					}
+
+					rulerZoomIndex : Timeframe
+
+					if mouseStateStartZoomIndex > zoomIndex
+					{
+						rulerZoomIndex = zoomIndex
+					}
+					else
+					{
+						rulerZoomIndex = mouseStateStartZoomIndex
+					}
+
+					startIndex := CandleList_TimestampToIndex(chart.candles[rulerZoomIndex], newStartTimestamp)
+					endIndex := CandleList_TimestampToIndex(chart.candles[rulerZoomIndex], newEndTimestamp)
+
+					VolumeProfile_Resize(&selectedMultitool.volumeProfile, selectedMultitool.startTimestamp, selectedMultitool.endTimestamp, newStartTimestamp, newEndTimestamp, chart)
+
+					selectedMultitool.startTimestamp = newStartTimestamp
+					selectedMultitool.endTimestamp = newEndTimestamp
+				}
+				case .DRAG_VERTICAL:
+				{
+					selectedMultitool.high = math.max(mouseStateStartPrice, cursorSnapPrice)
+					selectedMultitool.low = math.min(mouseStateStartPrice, cursorSnapPrice)
+					selectedMultitool.isUpsideDown = mouseStateStartPrice < cursorSnapPrice
+				}
+				case .NONE:
+				{
+				}
 			}
-			else
-			{
-				newStartTimestamp = CandleList_IndexToTimestamp(chart.candles[dragStartZoomIndex], dragStartCandleIndex)
-				newEndTimestamp = CandleList_IndexToTimestamp(chart.candles[zoomIndex], cursorCandleIndex + 1)
-			}
-
-			rulerZoomIndex : Timeframe
-
-			if dragStartZoomIndex > zoomIndex
-			{
-				rulerZoomIndex = zoomIndex
-			}
-			else
-			{
-				rulerZoomIndex = dragStartZoomIndex
-			}
-
-			startIndex := CandleList_TimestampToIndex(chart.candles[rulerZoomIndex], newStartTimestamp)
-			endIndex := CandleList_TimestampToIndex(chart.candles[rulerZoomIndex], newEndTimestamp)
-
-			VolumeProfile_Resize(&selectedMultitool.volumeProfile, selectedMultitool.startTimestamp, selectedMultitool.endTimestamp, newStartTimestamp, newEndTimestamp, chart)
-
-			selectedMultitool.startTimestamp = newStartTimestamp
-			selectedMultitool.endTimestamp = newEndTimestamp
-			selectedMultitool.high = math.max(dragStartPrice, cursorSnapPrice)
-			selectedMultitool.low = math.min(dragStartPrice, cursorSnapPrice)
-			selectedMultitool.isUpsideDown = dragStartPrice < cursorSnapPrice
 		}
+
+		SetMouseCursor(cursor)
 
 		// Vertical Scale Adjustment
 		if IsMouseButtonPressed(.RIGHT)
