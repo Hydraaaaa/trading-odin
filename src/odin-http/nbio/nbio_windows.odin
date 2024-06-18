@@ -21,7 +21,7 @@ _init :: proc(io: ^IO, allocator := context.allocator) -> (err: os.Errno) {
 		assert(win.WSACleanup() == win.NO_ERROR)
 	}
 
-	io.iocp = win.CreateIoCompletionPort(win.INVALID_HANDLE_VALUE, nil, nil, 0)
+	io.iocp = win.CreateIoCompletionPort(win.INVALID_HANDLE_VALUE, nil, 0, 0)
 	if io.iocp == nil {
 		err = os.Errno(win.GetLastError())
 		return
@@ -31,6 +31,8 @@ _init :: proc(io: ^IO, allocator := context.allocator) -> (err: os.Errno) {
 }
 
 _destroy :: proc(io: ^IO) {
+	context.allocator = io.allocator
+
 	delete(io.timeouts)
 	queue.destroy(&io.completed)
 	pool_destroy(&io.completion_pool)
@@ -172,7 +174,7 @@ _open :: proc(io: ^IO, path: string, mode, perm: int) -> (os.Handle, os.Errno) {
 
 	// Everything past here is custom/not from `os.open`.
 
-	handle_iocp := win.CreateIoCompletionPort(win.HANDLE(handle), io.iocp, nil, 0)
+	handle_iocp := win.CreateIoCompletionPort(win.HANDLE(handle), io.iocp, 0, 0)
 	assert(handle_iocp == io.iocp)
 
 	cmode: byte
@@ -348,3 +350,14 @@ _timeout :: proc(io: ^IO, dur: time.Duration, user: rawptr, callback: On_Timeout
 	return completion
 }
 
+_next_tick :: proc(io: ^IO, user: rawptr, callback: On_Next_Tick) -> ^Completion {
+	panic("unimplemented on windows: next_tick")
+}
+
+_poll :: proc(io: ^IO, fd: os.Handle, event: Poll_Event, multi: bool, user: rawptr, callback: On_Poll) -> ^Completion {
+	panic("unimplemented on windows: poll")
+}
+
+_poll_remove :: proc(io: ^IO, fd: os.Handle, event: Poll_Event) -> ^Completion {
+	panic("unimplemented on windows: poll_remove")
+}

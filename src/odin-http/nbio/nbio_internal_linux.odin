@@ -9,6 +9,7 @@ import "core:fmt"
 import "core:mem"
 import "core:net"
 import "core:os"
+import "core:sys/linux"
 import "core:sys/unix"
 
 import io_uring "_io_uring"
@@ -94,6 +95,22 @@ Op_Timeout :: struct {
 	expires:  unix.timespec,
 }
 
+Op_Next_Tick :: struct {
+	callback: On_Next_Tick,
+}
+
+Op_Poll :: struct {
+	callback: On_Poll,
+	fd:       os.Handle,
+	event:    Poll_Event,
+	multi:    bool,
+}
+
+Op_Poll_Remove :: struct {
+	fd:    os.Handle,
+	event: Poll_Event,
+}
+
 flush :: proc(io: ^IO, wait_nr: u32, timeouts: ^uint, etime: ^bool) -> os.Errno {
 	err := flush_submissions(io, wait_nr, timeouts, etime)
 	if err != os.ERROR_NONE do return err
@@ -109,14 +126,17 @@ flush :: proc(io: ^IO, wait_nr: u32, timeouts: ^uint, etime: ^bool) -> os.Errno 
 	for _ in 0..<n {
 		unqueued := queue.pop_front(&io.unqueued)
 		switch &op in unqueued.operation {
-		case Op_Accept:  accept_enqueue (io, unqueued, &op)
-		case Op_Close:   close_enqueue  (io, unqueued, &op)
-		case Op_Connect: connect_enqueue(io, unqueued, &op)
-		case Op_Read:    read_enqueue   (io, unqueued, &op)
-		case Op_Recv:    recv_enqueue   (io, unqueued, &op)
-		case Op_Send:    send_enqueue   (io, unqueued, &op)
-		case Op_Write:   write_enqueue  (io, unqueued, &op)
-		case Op_Timeout: timeout_enqueue(io, unqueued, &op)
+		case Op_Accept:      accept_enqueue     (io, unqueued, &op)
+		case Op_Close:       close_enqueue      (io, unqueued, &op)
+		case Op_Connect:     connect_enqueue    (io, unqueued, &op)
+		case Op_Read:        read_enqueue       (io, unqueued, &op)
+		case Op_Recv:        recv_enqueue       (io, unqueued, &op)
+		case Op_Send:        send_enqueue       (io, unqueued, &op)
+		case Op_Write:       write_enqueue      (io, unqueued, &op)
+		case Op_Timeout:     timeout_enqueue    (io, unqueued, &op)
+		case Op_Poll:        poll_enqueue       (io, unqueued, &op)
+		case Op_Poll_Remove: poll_remove_enqueue(io, unqueued, &op)
+		case Op_Next_Tick:   unreachable()
 		}
 	}
 
@@ -126,14 +146,17 @@ flush :: proc(io: ^IO, wait_nr: u32, timeouts: ^uint, etime: ^bool) -> os.Errno 
 		context = completed.ctx
 
 		switch &op in completed.operation {
-		case Op_Accept:   accept_callback (io, completed, &op)
-		case Op_Close:    close_callback  (io, completed, &op)
-		case Op_Connect:  connect_callback(io, completed, &op)
-		case Op_Read:     read_callback   (io, completed, &op)
-		case Op_Recv:     recv_callback   (io, completed, &op)
-		case Op_Send:     send_callback   (io, completed, &op)
-		case Op_Write:    write_callback  (io, completed, &op)
-		case Op_Timeout:  timeout_callback(io, completed, &op)
+		case Op_Accept:      accept_callback     (io, completed, &op)
+		case Op_Close:       close_callback      (io, completed, &op)
+		case Op_Connect:     connect_callback    (io, completed, &op)
+		case Op_Read:        read_callback       (io, completed, &op)
+		case Op_Recv:        recv_callback       (io, completed, &op)
+		case Op_Send:        send_callback       (io, completed, &op)
+		case Op_Write:       write_callback      (io, completed, &op)
+		case Op_Timeout:     timeout_callback    (io, completed, &op)
+		case Op_Poll:        poll_callback       (io, completed, &op)
+		case Op_Poll_Remove: poll_remove_callback(io, completed, &op)
+		case Op_Next_Tick:   next_tick_callback  (io, completed, &op)
 		case: unreachable()
 		}
 	}
@@ -464,17 +487,73 @@ timeout_enqueue :: proc(io: ^IO, completion: ^Completion, op: ^Op_Timeout) {
 }
 
 timeout_callback :: proc(io: ^IO, completion: ^Completion, op: ^Op_Timeout) {
-	errno := os.Errno(-completion.result)
-	switch errno {
-	case os.EINTR, os.EWOULDBLOCK:
-		timeout_enqueue(io, completion, op)
-	case:
-		// TODO: we are swallowing the returned error here.
-		fmt.assertf(errno == os.ERROR_NONE || errno == os.ETIME, "timeout error: %v", errno)
+	if completion.result < 0 {
+		errno := os.Errno(-completion.result)
+		switch errno {
+		case os.ETIME: // OK.
+		case os.EINTR, os.EWOULDBLOCK:
+			timeout_enqueue(io, completion, op)
+			return
+		case:
+			fmt.panicf("timeout error: %v", errno)
+		}
+	}
 
-		op.callback(completion.user_data, nil)
+	op.callback(completion.user_data)
+	pool_put(&io.completion_pool, completion)
+}
+
+next_tick_callback :: proc(io: ^IO, completion: ^Completion, op: ^Op_Next_Tick) {
+	op.callback(completion.user_data)
+	pool_put(&io.completion_pool, completion)
+}
+
+poll_enqueue :: proc(io: ^IO, completion: ^Completion, op: ^Op_Poll) {
+	events: linux.Fd_Poll_Events
+	switch op.event {
+	case .Read:  events = linux.Fd_Poll_Events{.IN}
+	case .Write: events = linux.Fd_Poll_Events{.OUT}
+	}
+
+	flags: io_uring.IORing_Poll_Flags
+	if op.multi {
+		flags = io_uring.IORing_Poll_Flags{.ADD_MULTI}
+	}
+
+	_, err := io_uring.poll_add(&io.ring, u64(uintptr(completion)), op.fd, events, flags)
+	if err == .Submission_Queue_Full {
+		queue.push_back(&io.unqueued, completion)
+		return
+	}
+
+	io.ios_queued += 1
+}
+
+poll_callback :: proc(io: ^IO, completion: ^Completion, op: ^Op_Poll) {
+	op.callback(completion.user_data, op.event)
+	if !op.multi {
 		pool_put(&io.completion_pool, completion)
 	}
+}
+
+poll_remove_enqueue :: proc(io: ^IO, completion: ^Completion, op: ^Op_Poll_Remove) {
+	events: linux.Fd_Poll_Events
+	switch op.event {
+	case .Read:  events = linux.Fd_Poll_Events{.IN}
+	case .Write: events = linux.Fd_Poll_Events{.OUT}
+	}
+
+	_, err := io_uring.poll_remove(&io.ring, u64(uintptr(completion)), op.fd, events)
+	if err == .Submission_Queue_Full {
+		queue.push_back(&io.unqueued, completion)
+		return
+	}
+
+	io.ios_queued += 1
+}
+
+poll_remove_callback :: proc(io: ^IO, completion: ^Completion, op: ^Op_Poll_Remove) {
+	pool_put(&io.completion_pool, completion)
 }
 
 ring_err_to_os_err :: proc(err: io_uring.IO_Uring_Error) -> os.Errno {

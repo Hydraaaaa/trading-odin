@@ -95,10 +95,15 @@ Op_Send :: struct {
 }
 
 Op_Timeout :: struct {
-	callback:     On_Timeout,
-	expires:      time.Time,
-	completed_at: time.Time,
+	callback: On_Timeout,
+	expires:  time.Time,
 }
+
+Op_Next_Tick :: struct {}
+
+Op_Poll :: struct {}
+
+Op_Poll_Remove :: struct {}
 
 flush_timeouts :: proc(io: ^IO) -> (expires: Maybe(time.Duration)) {
 	curr: time.Time
@@ -115,7 +120,6 @@ flush_timeouts :: proc(io: ^IO) -> (expires: Maybe(time.Duration)) {
 		// Timeout done.
 		if (cexpires <= 0) {
 			ordered_remove(&io.timeouts, i)
-			op.completed_at = curr
 			queue.push_back(&io.completed, completion)
 			timeout_len -= 1
 			continue
@@ -136,7 +140,7 @@ prepare_socket :: proc(io: ^IO, socket: net.Any_Socket) -> net.Network_Error {
 
 	handle := win.HANDLE(uintptr(net.any_socket_to_socket(socket)))
 
-	handle_iocp := win.CreateIoCompletionPort(handle, io.iocp, nil, 0)
+	handle_iocp := win.CreateIoCompletionPort(handle, io.iocp, 0, 0)
 	assert(handle_iocp == io.iocp)
 
 	mode: byte
@@ -298,7 +302,11 @@ handle_completion :: proc(io: ^IO, completion: ^Completion) {
 		}
 
 	case Op_Timeout:
-		op.callback(completion.user_data, op.completed_at)
+		op.callback(completion.user_data)
+
+	case Op_Next_Tick, Op_Poll, Op_Poll_Remove:
+		unreachable()
+
 	}
 	pool_put(&io.completion_pool, completion)
 }
