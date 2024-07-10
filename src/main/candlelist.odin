@@ -1,6 +1,7 @@
 package main
 
 import "core:fmt"
+import "core:math"
 
 CandleList :: struct
 {
@@ -146,8 +147,6 @@ CandleList_CandlesBetweenTimestamps :: proc(candleList : CandleList, startTimest
     startTimestamp := startTimestamp - candleList.offset
     endTimestamp := endTimestamp - candleList.offset
 
-	timeframeIncrements := CANDLE_TIMEFRAME_INCREMENTS
-
     candleListLen := i32(len(candleList.candles))
 
 	lastCandleIndex := candleListLen - 1
@@ -156,10 +155,7 @@ CandleList_CandlesBetweenTimestamps :: proc(candleList : CandleList, startTimest
 	{
 		monthlyIncrements := MONTHLY_INCREMENTS
 
-		if startTimestamp < 0
-		{
-			startTimestamp = 0
-		}
+		startTimestamp = math.max(startTimestamp, 0)
 
 		cameraCandleIndex := startTimestamp / FOUR_YEARS * 48
 		remainingCameraTimestamp := startTimestamp % FOUR_YEARS
@@ -189,30 +185,15 @@ CandleList_CandlesBetweenTimestamps :: proc(candleList : CandleList, startTimest
 			remainingIndex -= 1
 		}
 
-		cameraEndCandleIndex += remainingIndex
-
-		if cameraCandleIndex < 0
-		{
-			cameraCandleIndex = 0
-		}
-		else if cameraCandleIndex > lastCandleIndex
-		{
-			cameraCandleIndex = lastCandleIndex
-		}
-
-		if cameraEndCandleIndex < 0
-		{
-			cameraEndCandleIndex = 0
-		}
-		else if cameraEndCandleIndex > lastCandleIndex + 1
-		{
-			cameraEndCandleIndex = lastCandleIndex + 1
-		}
+		cameraCandleIndex = math.clamp(cameraCandleIndex, 0, lastCandleIndex)
+		cameraEndCandleIndex = math.clamp(cameraEndCandleIndex + remainingIndex, 0, lastCandleIndex + 1)
 
 		return candleList.candles[cameraCandleIndex:cameraEndCandleIndex], cameraCandleIndex
 	}
 
 	// Everything below months is uniform, and can be mathed
+	timeframeIncrements := CANDLE_TIMEFRAME_INCREMENTS
+
 	increment := timeframeIncrements[candleList.timeframe]
 
 	if candleListLen * increment < startTimestamp
@@ -221,27 +202,8 @@ CandleList_CandlesBetweenTimestamps :: proc(candleList : CandleList, startTimest
 		return nil, 0
 	}
 
-	startIndex := startTimestamp / increment
-	endIndex := endTimestamp / increment + 1
-
-	if startIndex < 0
-	{
-		startIndex = 0
-	}
-	else if startIndex > lastCandleIndex
-	{
-		startIndex = lastCandleIndex
-	}
-
-	if endIndex < 0
-	{
-		endIndex = 0
-	}
-	else if endIndex > lastCandleIndex + 1
-	{
-		// +1 because slices exclude the max index
-		endIndex = lastCandleIndex + 1
-	}
+	startIndex := math.clamp(startTimestamp / increment, 0, lastCandleIndex)
+	endIndex := math.clamp(endTimestamp / increment + 1, 0, lastCandleIndex + 1) // +1 because slices exclude the max index
 
 	return candleList.candles[startIndex:endIndex], startIndex
 }

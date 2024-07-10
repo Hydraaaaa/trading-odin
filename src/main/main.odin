@@ -31,11 +31,11 @@ CursorState :: enum
 	DRAG_DIAGONAL,
 }
 
+profilerData : ProfilerData
+
 main :: proc()
 {
 	using raylib
-
-	profilerData : ProfilerData
 
 	SetConfigFlags({.WINDOW_RESIZABLE})
 
@@ -206,15 +206,8 @@ main :: proc()
 
 		for candle in visibleCandles
 		{
-			if candle.low < low
-			{
-				low = candle.low
-			}
-
-			if candle.high > high
-			{
-				high = candle.high
-			}
+			low = math.min(low, candle.low)
+			high = math.max(high, candle.high)
 		}
 
 		middle : f32 = (math.log10(high) + math.log10(low)) / 2
@@ -419,19 +412,10 @@ main :: proc()
 					newEndTimestamp = CandleList_IndexToTimestamp(chart.candles[zoomIndex], cursorCandleIndex + 1)
 				}
 
-				rulerZoomIndex : Timeframe
+				minZoomIndex := math.min(zoomIndex, mouseStateStartZoomIndex)
 
-				if mouseStateStartZoomIndex > zoomIndex
-				{
-					rulerZoomIndex = zoomIndex
-				}
-				else
-				{
-					rulerZoomIndex = mouseStateStartZoomIndex
-				}
-
-				startIndex := CandleList_TimestampToIndex(chart.candles[rulerZoomIndex], newStartTimestamp)
-				endIndex := CandleList_TimestampToIndex(chart.candles[rulerZoomIndex], newEndTimestamp)
+				startIndex := CandleList_TimestampToIndex(chart.candles[minZoomIndex], newStartTimestamp)
+				endIndex := CandleList_TimestampToIndex(chart.candles[minZoomIndex], newEndTimestamp)
 
 				selectedMultitool.volumeProfile = VolumeProfile_Create(newStartTimestamp, newEndTimestamp, chart, 25)
 
@@ -457,16 +441,13 @@ main :: proc()
 
 		cursorDelta := GetMouseDelta()
 
-		switch mouseState
+		#partial switch mouseState
 		{
 			// An XOR to determine which of the two diagonal cursors to display
 			case .DRAG_DIAGONAL: cursor = .RESIZE_NESW - MouseCursor((cursorCandleIndex > mouseStateStartCandleIndex) != (cursorSnapPrice > mouseStateStartPrice))
 
 			case .DRAG_HORIZONTAL: cursor = .RESIZE_EW
 			case .DRAG_VERTICAL: cursor = .RESIZE_NS
-
-			case .PAN:
-			case .NONE:
 		}
 
 		if cursorDelta.x != 0 ||
@@ -474,7 +455,7 @@ main :: proc()
 		{
 			mouseStateHasMoved = true
 
-			switch mouseState
+			#partial switch mouseState
 			{
 				case .PAN:
 				{
@@ -499,19 +480,10 @@ main :: proc()
 						newEndTimestamp = CandleList_IndexToTimestamp(chart.candles[zoomIndex], cursorCandleIndex + 1)
 					}
 
-					rulerZoomIndex : Timeframe
+					minZoomIndex := math.min(zoomIndex, mouseStateStartZoomIndex)
 
-					if mouseStateStartZoomIndex > zoomIndex
-					{
-						rulerZoomIndex = zoomIndex
-					}
-					else
-					{
-						rulerZoomIndex = mouseStateStartZoomIndex
-					}
-
-					startIndex := CandleList_TimestampToIndex(chart.candles[rulerZoomIndex], newStartTimestamp)
-					endIndex := CandleList_TimestampToIndex(chart.candles[rulerZoomIndex], newEndTimestamp)
+					startIndex := CandleList_TimestampToIndex(chart.candles[minZoomIndex], newStartTimestamp)
+					endIndex := CandleList_TimestampToIndex(chart.candles[minZoomIndex], newEndTimestamp)
 
 					VolumeProfile_Resize(&selectedMultitool.volumeProfile, selectedMultitool.startTimestamp, selectedMultitool.endTimestamp, newStartTimestamp, newEndTimestamp, chart)
 
@@ -537,19 +509,10 @@ main :: proc()
 						newEndTimestamp = CandleList_IndexToTimestamp(chart.candles[zoomIndex], cursorCandleIndex + 1)
 					}
 
-					rulerZoomIndex : Timeframe
+					minZoomIndex := math.min(zoomIndex, mouseStateStartZoomIndex)
 
-					if mouseStateStartZoomIndex > zoomIndex
-					{
-						rulerZoomIndex = zoomIndex
-					}
-					else
-					{
-						rulerZoomIndex = mouseStateStartZoomIndex
-					}
-
-					startIndex := CandleList_TimestampToIndex(chart.candles[rulerZoomIndex], newStartTimestamp)
-					endIndex := CandleList_TimestampToIndex(chart.candles[rulerZoomIndex], newEndTimestamp)
+					startIndex := CandleList_TimestampToIndex(chart.candles[minZoomIndex], newStartTimestamp)
+					endIndex := CandleList_TimestampToIndex(chart.candles[minZoomIndex], newEndTimestamp)
 
 					VolumeProfile_Resize(&selectedMultitool.volumeProfile, selectedMultitool.startTimestamp, selectedMultitool.endTimestamp, newStartTimestamp, newEndTimestamp, chart)
 
@@ -561,9 +524,6 @@ main :: proc()
 					selectedMultitool.high = math.max(mouseStateStartPrice, cursorSnapPrice)
 					selectedMultitool.low = math.min(mouseStateStartPrice, cursorSnapPrice)
 					selectedMultitool.isUpsideDown = mouseStateStartPrice < cursorSnapPrice
-				}
-				case .NONE:
-				{
 				}
 			}
 		}
@@ -743,25 +703,10 @@ main :: proc()
 			high := Price_ToPixelY(cursorCandle.high, scaleData) - cameraPosY
 			low := Price_ToPixelY(cursorCandle.low, scaleData) - cameraPosY
 
-			midHigh : i32
-			midLow : i32
-			midHighPrice : f32
-			midLowPrice : f32
-
-			if cursorCandle.open > cursorCandle.close
-			{
-				midHigh = Price_ToPixelY(cursorCandle.open, scaleData) - cameraPosY
-				midLow = Price_ToPixelY(cursorCandle.close, scaleData) - cameraPosY
-				midHighPrice = cursorCandle.open
-				midLowPrice = cursorCandle.close
-			}
-			else
-			{
-				midHigh = Price_ToPixelY(cursorCandle.close, scaleData) - cameraPosY
-				midLow = Price_ToPixelY(cursorCandle.open, scaleData) - cameraPosY
-				midHighPrice = cursorCandle.close
-				midLowPrice = cursorCandle.open
-			}
+			midHighPrice := math.max(cursorCandle.open, cursorCandle.close)
+			midLowPrice := math.min(cursorCandle.open, cursorCandle.close)
+			midHigh := Price_ToPixelY(midHighPrice, scaleData) - cameraPosY
+			midLow := Price_ToPixelY(midLowPrice, scaleData) - cameraPosY
 
 			highestSnap := high - SNAP_PIXELS
 			lowestSnap := low + SNAP_PIXELS
@@ -833,21 +778,17 @@ main :: proc()
 
 		priceLabelSpacing : i32 = labelHeight + 6
 
-		MINIMUM_DECIMAL :: 0.01
+		MIN_DECIMAL :: 0.01
+		MAX_PRICE_DIFFERENCE : f32 : 1_000_000_000
 
 		if scaleData.logScale
 		{
 			priceIncrements : [4]f32 = {1, 2.5, 5, 10}
 
 			topLabelPrice := Price_FromPixelY(cameraPosY - labelHeight / 2, scaleData)
-			priceDifference := Price_FromPixelY(cameraPosY - labelHeight / 2 - priceLabelSpacing, scaleData) - topLabelPrice
+			priceDifference := math.min(Price_FromPixelY(cameraPosY - labelHeight / 2 - priceLabelSpacing, scaleData) - topLabelPrice, MAX_PRICE_DIFFERENCE)
 
-			currentMagnitude : f32 = 1_000_000_000
-
-			if priceDifference > 1_000_000_000
-			{
-				priceDifference = 1_000_000_000
-			}
+			currentMagnitude := MAX_PRICE_DIFFERENCE
 
 			for currentMagnitude > priceDifference
 			{
@@ -882,7 +823,7 @@ main :: proc()
 				priceDifference = prevPrice - currentPrice
 
 				// Price_FromPixelY can sometimes return +inf, which crashes the program without this break
-				if currentPrice > 1_000_000_000
+				if currentPrice > MAX_PRICE_DIFFERENCE
 				{
 					break
 				}
@@ -923,7 +864,7 @@ main :: proc()
 			// Do everything multiplied by the minimum decimal so that the minimum value is 1
 			// This way everything can be done in integers and we can avoid precision errors
 
-			priceLabelSpacing = i32(f32(priceLabelSpacing) / MINIMUM_DECIMAL)
+			priceLabelSpacing = i32(f32(priceLabelSpacing) / MIN_DECIMAL)
 
 			pixelPriceIncrement : f32 = abs(Price_ToPixelY_f32(1, scaleData) - Price_ToPixelY_f32(0, scaleData))
 
@@ -944,8 +885,8 @@ main :: proc()
 
 			priceIncrement := i32(f32(priceIncrementMultiplier) * priceIncrements[priceIncrementIndex])
 
-			screenTopPrice := i32(Price_FromPixelY(cameraPosY, scaleData) / MINIMUM_DECIMAL)
-			screenBottomPrice := i32(Price_FromPixelY(cameraPosY + screenHeight, scaleData) / MINIMUM_DECIMAL)
+			screenTopPrice := i32(Price_FromPixelY(cameraPosY, scaleData) / MIN_DECIMAL)
+			screenBottomPrice := i32(Price_FromPixelY(cameraPosY + screenHeight, scaleData) / MIN_DECIMAL)
 
 			// Round to the nearest increment (which lies above the screen border)
 			currentPrice := screenTopPrice + priceIncrement - screenTopPrice % priceIncrement
@@ -1317,38 +1258,18 @@ main :: proc()
 			if zoomIndexHTF < Timeframe(TIMEFRAME_COUNT)
 			{
 				visibleHTFCandles, visibleHTFCandlesStartIndex := CandleList_CandlesBetweenTimestamps(chart.candles[zoomIndexHTF], cameraTimestamp, cameraEndTimestamp)
+
+				outlineColors := [2]Color{{0, 255, 0, 63}, {255, 0, 0, 63}}
+
 				for candle, i in visibleHTFCandles
 				{
-					xPos : i32 = CandleList_IndexToPixelX(chart.candles[zoomIndexHTF], i32(i) + visibleHTFCandlesStartIndex, scaleData) - cameraPosX
-					candleWidth : i32 = CandleList_IndexToWidth(chart.candles[zoomIndexHTF], i32(i) + visibleHTFCandlesStartIndex, scaleData)
+					xPos := CandleList_IndexToPixelX(chart.candles[zoomIndexHTF], i32(i) + visibleHTFCandlesStartIndex, scaleData) - cameraPosX
+					candleWidth := CandleList_IndexToWidth(chart.candles[zoomIndexHTF], i32(i) + visibleHTFCandlesStartIndex, scaleData)
 
-					scaledOpen : i32 = Price_ToPixelY(candle.open, scaleData)
-					scaledClose : i32 = Price_ToPixelY(candle.close, scaleData)
-					scaledHigh : i32 = Price_ToPixelY(candle.high, scaleData)
-					scaledLow : i32 = Price_ToPixelY(candle.low, scaleData)
+					bodyPosY := Price_ToPixelY(math.max(candle.open, candle.close), scaleData)
+					bodyHeight:= math.max(Price_ToPixelY(math.min(candle.open, candle.close), scaleData) - bodyPosY, 1)
 
-					if scaledClose > scaledOpen // Red
-					{
-						candleHeight := scaledClose - scaledOpen
-
-						if candleHeight < 1
-						{
-							candleHeight = 1
-						}
-
-						DrawRectangleLines(xPos, scaledOpen - cameraPosY, candleWidth, candleHeight, Color{255, 0, 0, 63})
-					}
-					else // Green
-					{
-						candleHeight := scaledOpen - scaledClose
-
-						if candleHeight < 1
-						{
-							candleHeight = 1
-						}
-
-						DrawRectangleLines(xPos, scaledClose - cameraPosY, candleWidth, candleHeight, Color{0, 255, 0, 63})
-					}
+					DrawRectangleLines(xPos, bodyPosY - cameraPosY, candleWidth, bodyHeight, outlineColors[int(candle.close <= candle.open)])
 				}
 			}
 		}
@@ -1363,41 +1284,23 @@ main :: proc()
 			}
 		}
 
+		// [0] = green, [1] = red
+		candleColors := [2]Color{{0, 255, 0, 255}, {255, 0, 0, 255}}
+
 		// Draw Candles
 		for candle, i in visibleCandles
 		{
-			xPos : i32 = CandleList_IndexToPixelX(chart.candles[zoomIndex], i32(i) + visibleCandlesStartIndex, scaleData) - cameraPosX
-			candleWidth : i32 = CandleList_IndexToWidth(chart.candles[zoomIndex], i32(i) + visibleCandlesStartIndex, scaleData)
+			xPos := CandleList_IndexToPixelX(chart.candles[zoomIndex], i32(i) + visibleCandlesStartIndex, scaleData) - cameraPosX
+			candleWidth := CandleList_IndexToWidth(chart.candles[zoomIndex], i32(i) + visibleCandlesStartIndex, scaleData)
 
-			scaledOpen : i32 = Price_ToPixelY(candle.open, scaleData)
-			scaledClose : i32 = Price_ToPixelY(candle.close, scaleData)
-			scaledHigh : i32 = Price_ToPixelY(candle.high, scaleData)
-			scaledLow : i32 = Price_ToPixelY(candle.low, scaleData)
+			bodyPosY := Price_ToPixelY(math.max(candle.open, candle.close), scaleData)
+			bodyHeight:= math.max(Price_ToPixelY(math.min(candle.open, candle.close), scaleData) - bodyPosY, 1)
 
-			if scaledClose > scaledOpen // Red
-			{
-				candleHeight := scaledClose - scaledOpen
+			wickPosY := Price_ToPixelY(candle.high, scaleData)
+			wickHeight:= Price_ToPixelY(candle.low, scaleData) - wickPosY
 
-				if candleHeight < 1
-				{
-					candleHeight = 1
-				}
-
-				DrawRectangle(xPos, scaledOpen - cameraPosY, candleWidth, candleHeight, RED) // Body
-				DrawRectangle(xPos + i32(f32(candleWidth) / 2 - 0.5), scaledHigh - cameraPosY, 1, scaledLow - scaledHigh, RED) // Wick
-			}
-			else // Green
-			{
-				candleHeight := scaledOpen - scaledClose
-
-				if candleHeight < 1
-				{
-					candleHeight = 1
-				}
-
-				DrawRectangle(xPos, scaledClose - cameraPosY, candleWidth, candleHeight, GREEN) // Body
-				DrawRectangle(xPos + i32(f32(candleWidth) / 2 - 0.5), scaledHigh - cameraPosY, 1, scaledLow - scaledHigh, GREEN) // Wick
-			}
+			DrawRectangle(xPos, bodyPosY - cameraPosY, candleWidth, bodyHeight, candleColors[int(candle.close <= candle.open)]) // Body
+			DrawRectangle(xPos + i32(f32(candleWidth) / 2 - 0.5), wickPosY - cameraPosY, 1, wickHeight, candleColors[int(candle.close <= candle.open)]) // Wick
 		}
 
 		// Draw previous week volume profiles
@@ -1439,6 +1342,8 @@ main :: proc()
 			{
 				startTimestamp := CandleList_IndexToTimestamp(chart.candles[Timeframe.DAY], i32(i))
 				endTimestamp := CandleList_IndexToTimestamp(chart.candles[Timeframe.DAY], i32(i) + 1)
+
+				// bucketSize is 0 if a profile hasn't been loaded yet
 				if chart.dailyVolumeProfiles[i].bucketSize == 0
 				{
 					startTimestamp := CandleList_IndexToTimestamp(chart.candles[Timeframe.DAY], i32(i))
@@ -1544,18 +1449,8 @@ main :: proc()
 
 		// Draw current price line
 		lastCandle := slice.last(chart.candles[zoomIndex].candles[:])
-		priceY := Price_ToPixelY(lastCandle.close, scaleData) - cameraPosY
-		priceColor : Color
-
-		if lastCandle.close < lastCandle.open
-		{
-			priceColor = RED
-			priceY -= 1
-		}
-		else
-		{
-			priceColor = GREEN
-		}
+		priceY := Price_ToPixelY(lastCandle.close, scaleData) - cameraPosY - i32(lastCandle.close < lastCandle.open)
+		priceColor := candleColors[int(lastCandle.close < lastCandle.open)]
 
 		for i : i32 = 0; i < screenWidth; i += 3
 		{
@@ -1578,14 +1473,7 @@ main :: proc()
 			labelPosX = f32(CandleList_IndexToPixelX(chart.candles[zoomIndex], highestCandleIndex, scaleData) - cameraPosX) - textRect.x / 2 + candleCenterOffset
 			labelPosY = f32(Price_ToPixelY(highestCandle.high, scaleData) - cameraPosY) - textRect.y - VERTICAL_LABEL_PADDING
 
-			if labelPosX < 2
-			{
-				labelPosX = 2
-			}
-			else if labelPosX > f32(screenWidth) - textRect.x - 2
-			{
-				labelPosX = f32(screenWidth) - textRect.x - 2
-			}
+			labelPosX = math.clamp(labelPosX, 2, f32(screenWidth) - textRect.x - 2)
 
 			candleCenterOffset = f32(CandleList_IndexToWidth(chart.candles[zoomIndex], highestCandleIndex, scaleData)) / 2 - 0.5
 			DrawTextEx(font, cstring(&textBuffer[0]), {labelPosX, labelPosY}, FONT_SIZE, 0, WHITE)
@@ -1600,14 +1488,7 @@ main :: proc()
 			labelPosX = f32(CandleList_IndexToPixelX(chart.candles[zoomIndex], lowestCandleIndex, scaleData) - cameraPosX) - textRect.x / 2 + candleCenterOffset
 			labelPosY = f32(Price_ToPixelY(lowestCandle.low, scaleData) - cameraPosY) + VERTICAL_LABEL_PADDING
 
-			if labelPosX < 2
-			{
-				labelPosX = 2
-			}
-			else if labelPosX > f32(screenWidth) - textRect.x - 2
-			{
-				labelPosX = f32(screenWidth) - textRect.x - 2
-			}
+			labelPosX = math.clamp(labelPosX, 2, f32(screenWidth) - textRect.x - 2)
 
 			candleCenterOffset = f32(CandleList_IndexToWidth(chart.candles[zoomIndex], lowestCandleIndex, scaleData)) / 2 - 0.5
 			DrawTextEx(font, cstring(&textBuffer[0]), {labelPosX, labelPosY}, FONT_SIZE, 0, WHITE)

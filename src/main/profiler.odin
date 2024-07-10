@@ -1,6 +1,7 @@
 package main
 
 import "core:fmt"
+import "core:math"
 import "core:os"
 import "core:time"
 import "core:slice"
@@ -26,14 +27,15 @@ ProfilerData :: struct
     totalDuration : time.Duration,
 }
 
-Profiler_StartProfile :: proc(sectionName : string, profilerData : ^ProfilerData)
+// Returns handle for speedier retrieval in StopProfile
+Profiler_StartProfile :: proc(sectionName : string, profilerData : ^ProfilerData) -> int
 {
     for dataPoint, i in profilerData.dataPoints
     {
         if strings.compare(sectionName, dataPoint.sectionName) == 0
         {
             time.stopwatch_start(&profilerData.dataPoints[i].stopwatch)
-            return
+            return i
         }
     }
 
@@ -44,11 +46,32 @@ Profiler_StartProfile :: proc(sectionName : string, profilerData : ^ProfilerData
     newDataPoint.sectionName = fmt.bprint(newDataPoint.sectionNameBuffer[:], sectionName)
     newDataPoint.shortestDuration = 999_999_999_999
 
+    handle := len(profilerData.dataPoints) - 1
+
     time.stopwatch_start(&newDataPoint.stopwatch)
 
+    return handle
 }
 
-Profiler_EndProfile :: proc(sectionName : string, profilerData : ^ProfilerData)
+Profiler_EndProfile :: proc{Profiler_EndProfileWithName, Profiler_EndProfileWithHandle}
+
+Profiler_EndProfileWithHandle :: proc(handle : int, profilerData : ^ProfilerData)
+{
+    time.stopwatch_stop(&profilerData.dataPoints[handle].stopwatch)
+
+    duration := time.stopwatch_duration(profilerData.dataPoints[handle].stopwatch)
+
+    time.stopwatch_reset(&profilerData.dataPoints[handle].stopwatch)
+
+    append(&profilerData.dataPoints[handle].durations, duration)
+    append(&profilerData.dataPoints[handle].timestamps, time.now())
+
+    profilerData.dataPoints[handle].shortestDuration = math.min(profilerData.dataPoints[handle].shortestDuration, duration)
+    profilerData.dataPoints[handle].longestDuration = math.max(profilerData.dataPoints[handle].longestDuration, duration)
+    profilerData.dataPoints[handle].totalDuration += duration
+}
+
+Profiler_EndProfileWithName :: proc(sectionName : string, profilerData : ^ProfilerData)
 {
     for dataPoint, i in profilerData.dataPoints
     {
