@@ -411,6 +411,7 @@ main :: proc()
 				selectedMultitool.drawTvVal = true
 				selectedMultitool.drawTvVah = true
 				selectedMultitool.drawVwap = true
+				selectedMultitool.draw618 = true
 
 				newStartTimestamp : i32
 				newEndTimestamp : i32

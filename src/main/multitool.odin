@@ -5,7 +5,7 @@ import "core:math"
 
 import "vendor:raylib"
 
-LEVEL_CIRCLE_RADIUS :: 4
+LEVEL_CIRCLE_RADIUS :: 5
 FIB_618_COLOR :: raylib.Color{255, 255, 127, 255}
 
 Multitool :: struct
