@@ -22,7 +22,7 @@ VERTICAL_LABEL_PADDING :: HORIZONTAL_LABEL_PADDING - 2
 
 FONT_SIZE :: 14
 
-CursorState :: enum
+MouseState :: enum
 {
 	NONE,
 	PAN,
@@ -135,7 +135,7 @@ main :: proc()
 	zoomLevel := 0
 	verticalZoomLevel : f32 = 0
 
-	mouseState := CursorState.NONE
+	mouseState := MouseState.NONE
 	mouseStateHasMoved := false
 	mouseStateStartCandleIndex : i32
 	mouseStateStartZoomIndex : Timeframe
@@ -293,12 +293,18 @@ main :: proc()
 		}
 
 		hoveredEdge := Edge.NONE
+		hoveredLevel := MultitoolLevel.NONE
 
-		if selectedMultitool != nil && mouseState == .NONE
+		if selectedMultitool != nil
 		{
-			hoveredEdge = Multitool_GetOverlappingEdge(selectedMultitool^, GetMouseX() + cameraPosX, GetMouseY() + cameraPosY, scaleData)
-		}
+			hoveredLevel = Multitool_LevelAtPoint(selectedMultitool^, GetMouseX() + cameraPosX, GetMouseY() + cameraPosY, scaleData)
 
+			if hoveredLevel == .NONE && mouseState == .NONE
+			{
+				hoveredEdge = Multitool_GetOverlappingEdge(selectedMultitool^, GetMouseX() + cameraPosX, GetMouseY() + cameraPosY, scaleData)
+			}
+		}
+	
 		// TODO: Hover least recently selected multitool when multiple are hovered
 		hoveredMultitool = nil
 		hoveredMultitoolIndex = -1
@@ -321,8 +327,11 @@ main :: proc()
 
 		cursor := hoverCursors[hoveredEdge]
 
-		// If a multitool is being hovered, and the mouse isn't being dragged, set cursor to pointing hand
-		cursor += .POINTING_HAND * MouseCursor(hoveredMultitool != nil && (mouseState == .NONE || !mouseStateHasMoved))
+		if hoveredLevel != .NONE ||
+		   hoveredMultitool != nil && (mouseState == .NONE || !mouseStateHasMoved)
+		{
+			cursor = .POINTING_HAND
+		}
 
 		if IsMouseButtonPressed(.LEFT)
 		{
@@ -396,7 +405,12 @@ main :: proc()
 				selectedMultitool = &multitools[len(multitools) - 1]
 				selectedMultitoolIndex = len(multitools) - 1
 
-				selectedMultitool.fibLevels = FIB_LEVELS
+				selectedMultitool.drawPoc = true
+				selectedMultitool.drawVal = true
+				selectedMultitool.drawVah = true
+				selectedMultitool.drawTvVal = true
+				selectedMultitool.drawTvVah = true
+				selectedMultitool.drawVwap = true
 
 				newStartTimestamp : i32
 				newEndTimestamp : i32
@@ -431,8 +445,21 @@ main :: proc()
 		{
 			if mouseState == .PAN && !mouseStateHasMoved
 			{
-				selectedMultitool = hoveredMultitool
-				selectedMultitoolIndex = hoveredMultitoolIndex
+				switch hoveredLevel
+				{
+					case .POC: selectedMultitool.drawPoc = !selectedMultitool.drawPoc
+					case .VAL: selectedMultitool.drawVal = !selectedMultitool.drawVal
+					case .VAH: selectedMultitool.drawVah = !selectedMultitool.drawVah
+					case .TV_VAL: selectedMultitool.drawTvVal = !selectedMultitool.drawTvVal
+					case .TV_VAH: selectedMultitool.drawTvVah = !selectedMultitool.drawTvVah
+					case .VWAP: selectedMultitool.drawVwap = !selectedMultitool.drawVwap
+					case .FIB_618: selectedMultitool.draw618 = !selectedMultitool.draw618
+					case .NONE:
+					{
+						selectedMultitool = hoveredMultitool
+						selectedMultitoolIndex = hoveredMultitoolIndex
+					}
+				}
 			}
 
 			mouseState = .NONE
@@ -1280,7 +1307,7 @@ main :: proc()
 			width := Timestamp_ToPixelX(multitool.endTimestamp, scaleData) - startPixel
 			if Multitool_IsOverlappingRect(multitool, cameraPosX, cameraPosY, screenWidth, screenHeight, scaleData)
 			{
-				VolumeProfile_Draw(multitool.volumeProfile, startPixel - cameraPosX, width, cameraPosY, scaleData, 100, true, false, false, false, false)
+				VolumeProfile_DrawBody(multitool.volumeProfile, startPixel - cameraPosX, width, cameraPosY, scaleData, 100)
 			}
 		}
 
@@ -1326,7 +1353,7 @@ main :: proc()
 				startPixel := CandleList_IndexToPixelX(chart.candles[Timeframe.WEEK], i32(i) + 1, scaleData)
 				endPixel := CandleList_IndexToPixelX(chart.candles[Timeframe.WEEK], i32(i) + 2, scaleData)
 
-				VolumeProfile_Draw(chart.weeklyVolumeProfiles[i], startPixel - cameraPosX, endPixel - startPixel, cameraPosY, scaleData, 95, false, true, true, true, true)
+				VolumeProfile_DrawLevels(chart.weeklyVolumeProfiles[i], startPixel - cameraPosX, endPixel - startPixel, cameraPosY, scaleData, 95)
 			}
 		}
 
@@ -1355,7 +1382,7 @@ main :: proc()
 				startPixel := CandleList_IndexToPixelX(chart.candles[Timeframe.DAY], i32(i) + 1, scaleData)
 				endPixel := CandleList_IndexToPixelX(chart.candles[Timeframe.DAY], i32(i) + 2, scaleData)
 
-				VolumeProfile_Draw(chart.dailyVolumeProfiles[i], startPixel - cameraPosX, endPixel - startPixel, cameraPosY, scaleData, 63, false, true, true, true, true)
+				VolumeProfile_DrawLevels(chart.dailyVolumeProfiles[i], startPixel - cameraPosX, endPixel - startPixel, cameraPosY, scaleData, 63)
 			}
 		}
 
@@ -1424,6 +1451,30 @@ main :: proc()
 			width := Timestamp_ToPixelX(selectedMultitool.endTimestamp, scaleData) - posX
 			height := Price_ToPixelY(selectedMultitool.low, scaleData) - posY
 			DrawRectangleLines(posX - cameraPosX, posY - cameraPosY, width, height, {255, 255, 255, 255})
+
+			// Draw VolumeProfile circles
+			DrawCircle(posX + width - cameraPosX, VolumeProfile_BucketToPixelY(selectedMultitool.volumeProfile, selectedMultitool.volumeProfile.pocIndex, scaleData) - cameraPosY, LEVEL_CIRCLE_RADIUS, POC_COLOR)
+			DrawCircle(posX + width - cameraPosX, VolumeProfile_BucketToPixelY(selectedMultitool.volumeProfile, selectedMultitool.volumeProfile.valIndex, scaleData) - cameraPosY, LEVEL_CIRCLE_RADIUS, VAL_COLOR)
+			DrawCircle(posX + width - cameraPosX, VolumeProfile_BucketToPixelY(selectedMultitool.volumeProfile, selectedMultitool.volumeProfile.vahIndex, scaleData) - cameraPosY, LEVEL_CIRCLE_RADIUS, VAH_COLOR)
+			DrawCircle(posX + width - cameraPosX, VolumeProfile_BucketToPixelY(selectedMultitool.volumeProfile, selectedMultitool.volumeProfile.tvValIndex, scaleData) - cameraPosY, LEVEL_CIRCLE_RADIUS, TV_VAL_COLOR)
+			DrawCircle(posX + width - cameraPosX, VolumeProfile_BucketToPixelY(selectedMultitool.volumeProfile, selectedMultitool.volumeProfile.tvVahIndex, scaleData) - cameraPosY, LEVEL_CIRCLE_RADIUS, TV_VAH_COLOR)
+			DrawCircle(posX + width - cameraPosX, Price_ToPixelY(selectedMultitool.volumeProfile.vwap, scaleData) - cameraPosY, LEVEL_CIRCLE_RADIUS, VWAP_COLOR)
+			
+			// Draw 618
+			priceRange := selectedMultitool.high - selectedMultitool.low
+
+			pixelY : i32 = ---
+
+			if selectedMultitool.isUpsideDown
+			{
+				pixelY = Price_ToPixelY(priceRange * (1 - 0.618) + selectedMultitool.low, scaleData) - cameraPosY
+			}
+			else
+			{
+				pixelY = Price_ToPixelY(priceRange * 0.618 + selectedMultitool.low, scaleData) - cameraPosY
+			}
+
+			DrawCircle(posX + width - cameraPosX, pixelY, LEVEL_CIRCLE_RADIUS, {255, 255, 127, 255})
 		}
 
 		// Draw Crosshair

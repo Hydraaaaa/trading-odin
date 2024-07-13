@@ -5,7 +5,8 @@ import "core:math"
 
 import "vendor:raylib"
 
-FIB_LEVELS :: [2]FibLevel{{0.618, raylib.Color{255, 255, 127, 255}, true}, {0.382, raylib.Color{127, 255, 127, 255}, false}}
+LEVEL_CIRCLE_RADIUS :: 4
+FIB_618_COLOR :: raylib.Color{255, 255, 127, 255}
 
 Multitool :: struct
 {
@@ -16,15 +17,27 @@ Multitool :: struct
 
     volumeProfile : VolumeProfile,
 
-	fibLevels : [2]FibLevel,
+    drawPoc : bool,
+    drawVal : bool,
+    drawVah : bool,
+    drawTvVal : bool,
+    drawTvVah : bool,
+    drawVwap : bool,
+    draw618 : bool,
+    
 	isUpsideDown : bool,
 }
 
-FibLevel :: struct
+MultitoolLevel :: enum
 {
-	level : f32,
-	color : raylib.Color,
-	enabled : bool,
+	NONE = -1,
+	POC = 0,
+	VAL = 1,
+	VAH = 2,
+	TV_VAL = 3,
+	TV_VAH = 4,
+	VWAP = 5,
+	FIB_618 = 6,
 }
 
 Edge :: enum
@@ -204,34 +217,79 @@ Multitool_GetOverlappingEdge :: proc(multitool : Multitool, posX : i32, posY : i
 	return .NONE
 }
 
+Multitool_LevelAtPoint :: proc(multitool : Multitool, posX : i32, posY : i32, scaleData : ScaleData) -> MultitoolLevel 
+{
+	SQR_RADIUS :: LEVEL_CIRCLE_RADIUS * LEVEL_CIRCLE_RADIUS
+
+	distX := Timestamp_ToPixelX(multitool.endTimestamp, scaleData) - posX
+	targetSqrDistY := SQR_RADIUS - distX * distX
+	
+	levelY := Price_ToPixelY(multitool.volumeProfile.vwap, scaleData)
+	distY := levelY - posY
+	if distY * distY < targetSqrDistY { return .VWAP }
+
+	levelY = Price_ToPixelY(VolumeProfile_BucketToPrice(multitool.volumeProfile, multitool.volumeProfile.pocIndex), scaleData)
+	distY = levelY - posY
+	if distY * distY < targetSqrDistY { return .POC }
+
+	levelY = Price_ToPixelY(VolumeProfile_BucketToPrice(multitool.volumeProfile, multitool.volumeProfile.valIndex), scaleData)
+	distY = levelY - posY
+	if distY * distY < targetSqrDistY { return .VAL }
+
+	levelY = Price_ToPixelY(VolumeProfile_BucketToPrice(multitool.volumeProfile, multitool.volumeProfile.vahIndex), scaleData)
+	distY = levelY - posY
+	if distY * distY < targetSqrDistY { return .VAH }
+
+	levelY = Price_ToPixelY(VolumeProfile_BucketToPrice(multitool.volumeProfile, multitool.volumeProfile.tvValIndex), scaleData)
+	distY = levelY - posY
+	if distY * distY < targetSqrDistY { return .TV_VAL }
+
+	levelY = Price_ToPixelY(VolumeProfile_BucketToPrice(multitool.volumeProfile, multitool.volumeProfile.tvVahIndex), scaleData)
+	distY = levelY - posY
+	if distY * distY < targetSqrDistY { return .TV_VAH }
+
+	priceRange := multitool.high - multitool.low
+
+	if multitool.isUpsideDown
+	{
+		levelY = Price_ToPixelY(priceRange * (1 - 0.618) + multitool.low, scaleData)
+	}
+	else
+	{
+		levelY = Price_ToPixelY(priceRange * 0.618 + multitool.low, scaleData)
+	}
+
+	distY = levelY - posY
+	if distY * distY < targetSqrDistY { return .FIB_618 }
+
+	return .NONE
+}
+
 Multitool_Draw :: proc(multitool : Multitool, cameraPosX : i32, cameraPosY : i32, scaleData : ScaleData)
 {
 	startPixel := Timestamp_ToPixelX(multitool.startTimestamp, scaleData)
 	width := Timestamp_ToPixelX(multitool.endTimestamp, scaleData) - startPixel
-	VolumeProfile_Draw(multitool.volumeProfile, startPixel - cameraPosX, width, cameraPosY, scaleData, 63, true, false, false, false, false)
-	VolumeProfile_Draw(multitool.volumeProfile, startPixel - cameraPosX + width, width, cameraPosY, scaleData, 191, false, true, true, true, true)
+	VolumeProfile_DrawBody(multitool.volumeProfile, startPixel - cameraPosX, width, cameraPosY, scaleData, 63)
+	VolumeProfile_DrawLevels(multitool.volumeProfile, startPixel - cameraPosX + width, width, cameraPosY, scaleData, 191, multitool.drawPoc, multitool.drawVal, multitool.drawVah, multitool.drawTvVal, multitool.drawTvVah, multitool.drawVwap)
 
-	range := multitool.high - multitool.low
+	priceRange := multitool.high - multitool.low
 
 	fibStartPixel := startPixel + width - cameraPosX
 	fibEndPixel := startPixel + width + width - cameraPosX
 
-	for fib in multitool.fibLevels
+	if multitool.draw618
 	{
-		if fib.enabled
+		pixelY : i32 = ---
+
+		if multitool.isUpsideDown
 		{
-			pixelY : i32 = ---
-
-			if multitool.isUpsideDown
-			{
-				pixelY = Price_ToPixelY(range * (1 - fib.level) + multitool.low, scaleData) - cameraPosY
-			}
-			else
-			{
-				pixelY = Price_ToPixelY(range * fib.level + multitool.low, scaleData) - cameraPosY
-			}
-
-			raylib.DrawLine(fibStartPixel, pixelY, fibEndPixel, pixelY, fib.color)
+			pixelY = Price_ToPixelY(priceRange * (1 - 0.618) + multitool.low, scaleData) - cameraPosY
 		}
+		else
+		{
+			pixelY = Price_ToPixelY(priceRange * 0.618 + multitool.low, scaleData) - cameraPosY
+		}
+
+		raylib.DrawLine(fibStartPixel, pixelY, fibEndPixel, pixelY, FIB_618_COLOR)
 	}
 }
