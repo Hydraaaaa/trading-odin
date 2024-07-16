@@ -518,9 +518,9 @@ VolumeProfile_DrawBody :: proc(profile : VolumeProfile, posX : i32, width : i32,
 {
     highestBucketVolume := profile.buckets[profile.pocIndex].buyVolume + profile.buckets[profile.pocIndex].sellVolume
 
-    bucketIndex := math.min(0, VolumeProfile_PixelYToBucket(profile, cameraPosY, scaleData))
+    bucketIndex := math.max(0,                    VolumeProfile_PixelYToBucket(profile, cameraPosY + raylib.GetScreenHeight(), scaleData))
+    endIndex :=    math.min(len(profile.buckets), VolumeProfile_PixelYToBucket(profile, cameraPosY, scaleData) + 1)
 
-    endIndex := math.min(len(profile.buckets), VolumeProfile_PixelYToBucket(profile, cameraPosY, scaleData))
 
     for bucketIndex < endIndex
     {
