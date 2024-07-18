@@ -35,7 +35,7 @@ CandleCloseLevels_Create :: proc(candleList : CandleList, color : raylib.Color) 
 			// If next candle is green
 			if candles[startIndex + 1].close > startCandle.close
 			{
-				closeLevel := CandleCloseLevel {startTimestamp = CandleList_IndexToTimestamp(candleList, i32(startIndex) + 2), endTimestamp = -1, price = startCandle.close}
+				closeLevel := CandleCloseLevel{startTimestamp = CandleList_IndexToTimestamp(candleList, i32(startIndex) + 2), endTimestamp = -1, price = startCandle.close}
 
 				// Find end point for level
 				for endIndex in startIndex + 2 ..< len(candles) - 1
@@ -58,7 +58,7 @@ CandleCloseLevels_Create :: proc(candleList : CandleList, color : raylib.Color) 
 			// If next candle is red
 			if candles[startIndex + 1].close < startCandle.close
 			{
-				closeLevel := CandleCloseLevel {startTimestamp = CandleList_IndexToTimestamp(candleList, i32(startIndex) + 2), endTimestamp = -1, price = startCandle.close}
+				closeLevel := CandleCloseLevel{startTimestamp = CandleList_IndexToTimestamp(candleList, i32(startIndex) + 2), endTimestamp = -1, price = startCandle.close}
 
 				// Find end point for level
 				for endIndex in startIndex + 2 ..< len(candles) - 1

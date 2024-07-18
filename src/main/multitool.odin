@@ -8,49 +8,48 @@ import "vendor:raylib"
 LEVEL_CIRCLE_RADIUS :: 5
 FIB_618_COLOR :: raylib.Color{255, 255, 127, 255}
 
+Tool :: enum
+{
+	VOLUME_PROFILE,
+	FIB_RETRACEMENT,
+}
+
+ToolSet :: bit_set[Tool]
+
 Multitool :: struct
 {
 	startTimestamp : i32,
 	endTimestamp : i32,
 	high : f32,
 	low  : f32,
+	isUpsideDown : bool,
+
+	tools : ToolSet,
 
     volumeProfile : VolumeProfile,
+    volumeProfileDrawFlags : VolumeProfile_DrawFlagSet,
 
-    drawPoc : bool,
-    drawVal : bool,
-    drawVah : bool,
-    drawTvVal : bool,
-    drawTvVah : bool,
-    drawVwap : bool,
-    draw618 : bool,
-    
-	isUpsideDown : bool,
+	strategyResults : [dynamic]Result,
 }
 
-MultitoolLevel :: enum
+MultitoolHandle :: enum
 {
-	NONE = -1,
-	POC = 0,
-	VAL = 1,
-	VAH = 2,
-	TV_VAL = 3,
-	TV_VAH = 4,
-	VWAP = 5,
-	FIB_618 = 6,
-}
-
-Edge :: enum
-{
-	NONE = 0,
-	TOPLEFT = 1,
-	TOP = 2,
-	TOPRIGHT = 3,
-	LEFT = 4,
-	RIGHT = 5,
-	BOTTOMLEFT = 6,
-	BOTTOM = 7,
-	BOTTOMRIGHT = 8,
+	NONE,
+	EDGE_TOPLEFT,
+	EDGE_TOP,
+	EDGE_TOPRIGHT,
+	EDGE_LEFT,
+	EDGE_RIGHT,
+	EDGE_BOTTOMLEFT,
+	EDGE_BOTTOM,
+	EDGE_BOTTOMRIGHT,
+	POC,
+	VAL,
+	VAH,
+	TV_VAL,
+	TV_VAH,
+	VWAP,
+	FIB_618,
 }
 
 Multitool_Destroy :: proc(multitool : Multitool)
@@ -139,85 +138,7 @@ Multitool_IsOverlappingRect :: proc(multitool : Multitool, posX : i32, posY : i3
 	       multitool.endTimestamp + (multitool.endTimestamp - multitool.startTimestamp) >= startTimestamp
 }
 
-Multitool_GetOverlappingEdge :: proc(multitool : Multitool, posX : i32, posY : i32, scaleData : ScaleData) -> Edge
-{
-	EDGE_THICKNESS :: 3
-
-	leftPos := Timestamp_ToPixelX(multitool.startTimestamp, scaleData)
-	rightPos := Timestamp_ToPixelX(multitool.endTimestamp, scaleData)
-	topPos := Price_ToPixelY(multitool.high, scaleData)
-	bottomPos := Price_ToPixelY(multitool.low, scaleData)
-
-	// Corners
-	if posX >= leftPos - EDGE_THICKNESS &&
-	   posX <= leftPos + EDGE_THICKNESS &&
-	   posY >= topPos - EDGE_THICKNESS &&
-	   posY <= topPos + EDGE_THICKNESS
-	{
-		return .TOPLEFT
-	}
-
-	if posX >= rightPos - EDGE_THICKNESS &&
-	   posX <= rightPos + EDGE_THICKNESS &&
-	   posY >= topPos - EDGE_THICKNESS &&
-	   posY <= topPos + EDGE_THICKNESS
-	{
-		return .TOPRIGHT
-	}
-
-	if posX >= leftPos - EDGE_THICKNESS &&
-	   posX <= leftPos + EDGE_THICKNESS &&
-	   posY >= bottomPos - EDGE_THICKNESS &&
-	   posY <= bottomPos + EDGE_THICKNESS
-	{
-		return .BOTTOMLEFT
-	}
-
-	if posX >= rightPos - EDGE_THICKNESS &&
-	   posX <= rightPos + EDGE_THICKNESS &&
-	   posY >= bottomPos - EDGE_THICKNESS &&
-	   posY <= bottomPos + EDGE_THICKNESS
-	{
-		return .BOTTOMRIGHT
-	}
-
-	// Edges
-	if posX >= leftPos - EDGE_THICKNESS &&
-	   posX <= rightPos + EDGE_THICKNESS &&
-	   posY >= topPos - EDGE_THICKNESS &&
-	   posY <= topPos + EDGE_THICKNESS
-	{
-		return .TOP
-	}
-
-	if posX >= leftPos - EDGE_THICKNESS &&
-	   posX <= leftPos + EDGE_THICKNESS &&
-	   posY >= topPos - EDGE_THICKNESS &&
-	   posY <= bottomPos + EDGE_THICKNESS
-	{
-		return .LEFT
-	}
-
-	if posX >= rightPos - EDGE_THICKNESS &&
-	   posX <= rightPos + EDGE_THICKNESS &&
-	   posY >= topPos - EDGE_THICKNESS &&
-	   posY <= bottomPos + EDGE_THICKNESS
-	{
-		return .RIGHT
-	}
-
-	if posX >= leftPos - EDGE_THICKNESS &&
-	   posX <= rightPos + EDGE_THICKNESS &&
-	   posY >= bottomPos - EDGE_THICKNESS &&
-	   posY <= bottomPos + EDGE_THICKNESS
-	{
-		return .BOTTOM
-	}
-
-	return .NONE
-}
-
-Multitool_LevelAtPoint :: proc(multitool : Multitool, posX : i32, posY : i32, scaleData : ScaleData) -> MultitoolLevel 
+Multitool_HandleAt :: proc(multitool : Multitool, posX : i32, posY : i32, scaleData : ScaleData) -> MultitoolHandle
 {
 	SQR_RADIUS :: LEVEL_CIRCLE_RADIUS * LEVEL_CIRCLE_RADIUS
 
@@ -262,23 +183,102 @@ Multitool_LevelAtPoint :: proc(multitool : Multitool, posX : i32, posY : i32, sc
 	distY = levelY - posY
 	if distY * distY < targetSqrDistY { return .FIB_618 }
 
+	EDGE_THICKNESS :: 3
+
+	leftPos := Timestamp_ToPixelX(multitool.startTimestamp, scaleData)
+	rightPos := Timestamp_ToPixelX(multitool.endTimestamp, scaleData)
+	topPos := Price_ToPixelY(multitool.high, scaleData)
+	bottomPos := Price_ToPixelY(multitool.low, scaleData)
+
+	// Corners
+	if posX >= leftPos - EDGE_THICKNESS &&
+	   posX <= leftPos + EDGE_THICKNESS &&
+	   posY >= topPos - EDGE_THICKNESS &&
+	   posY <= topPos + EDGE_THICKNESS
+	{
+		return .EDGE_TOPLEFT
+	}
+
+	if posX >= rightPos - EDGE_THICKNESS &&
+	   posX <= rightPos + EDGE_THICKNESS &&
+	   posY >= topPos - EDGE_THICKNESS &&
+	   posY <= topPos + EDGE_THICKNESS
+	{
+		return .EDGE_TOPRIGHT
+	}
+
+	if posX >= leftPos - EDGE_THICKNESS &&
+	   posX <= leftPos + EDGE_THICKNESS &&
+	   posY >= bottomPos - EDGE_THICKNESS &&
+	   posY <= bottomPos + EDGE_THICKNESS
+	{
+		return .EDGE_BOTTOMLEFT
+	}
+
+	if posX >= rightPos - EDGE_THICKNESS &&
+	   posX <= rightPos + EDGE_THICKNESS &&
+	   posY >= bottomPos - EDGE_THICKNESS &&
+	   posY <= bottomPos + EDGE_THICKNESS
+	{
+		return .EDGE_BOTTOMRIGHT
+	}
+
+	// Edges
+	if posX >= leftPos - EDGE_THICKNESS &&
+	   posX <= rightPos + EDGE_THICKNESS &&
+	   posY >= topPos - EDGE_THICKNESS &&
+	   posY <= topPos + EDGE_THICKNESS
+	{
+		return .EDGE_TOP
+	}
+
+	if posX >= leftPos - EDGE_THICKNESS &&
+	   posX <= leftPos + EDGE_THICKNESS &&
+	   posY >= topPos - EDGE_THICKNESS &&
+	   posY <= bottomPos + EDGE_THICKNESS
+	{
+		return .EDGE_LEFT
+	}
+
+	if posX >= rightPos - EDGE_THICKNESS &&
+	   posX <= rightPos + EDGE_THICKNESS &&
+	   posY >= topPos - EDGE_THICKNESS &&
+	   posY <= bottomPos + EDGE_THICKNESS
+	{
+		return .EDGE_RIGHT
+	}
+
+	if posX >= leftPos - EDGE_THICKNESS &&
+	   posX <= rightPos + EDGE_THICKNESS &&
+	   posY >= bottomPos - EDGE_THICKNESS &&
+	   posY <= bottomPos + EDGE_THICKNESS
+	{
+		return .EDGE_BOTTOM
+	}
+
 	return .NONE
 }
 
 Multitool_Draw :: proc(multitool : Multitool, cameraPosX : i32, cameraPosY : i32, scaleData : ScaleData)
 {
+	using raylib
+	
 	startPixel := Timestamp_ToPixelX(multitool.startTimestamp, scaleData)
 	width := Timestamp_ToPixelX(multitool.endTimestamp, scaleData) - startPixel
-	VolumeProfile_DrawBody(multitool.volumeProfile, startPixel - cameraPosX, width, cameraPosY, scaleData, 63)
-	VolumeProfile_DrawLevels(multitool.volumeProfile, startPixel - cameraPosX + width, width, cameraPosY, scaleData, 191, multitool.drawPoc, multitool.drawVal, multitool.drawVah, multitool.drawTvVal, multitool.drawTvVah, multitool.drawVwap)
-
-	priceRange := multitool.high - multitool.low
-
-	fibStartPixel := startPixel + width - cameraPosX
-	fibEndPixel := startPixel + width + width - cameraPosX
-
-	if multitool.draw618
+	
+	if .VOLUME_PROFILE in multitool.tools
 	{
+		VolumeProfile_Draw(multitool.volumeProfile, startPixel - cameraPosX, width, cameraPosY, scaleData, 63, multitool.volumeProfileDrawFlags & {.BODY})
+		VolumeProfile_Draw(multitool.volumeProfile, startPixel - cameraPosX + width, width, cameraPosY, scaleData, 191, multitool.volumeProfileDrawFlags - {.BODY})
+	}
+
+	if .FIB_RETRACEMENT in multitool.tools
+	{
+		priceRange := multitool.high - multitool.low
+
+		fibStartPixel := startPixel + width - cameraPosX
+		fibEndPixel := startPixel + width + width - cameraPosX
+
 		pixelY : i32 = ---
 
 		if multitool.isUpsideDown
@@ -290,6 +290,128 @@ Multitool_Draw :: proc(multitool : Multitool, cameraPosX : i32, cameraPosY : i32
 			pixelY = Price_ToPixelY(priceRange * 0.618 + multitool.low, scaleData) - cameraPosY
 		}
 
-		raylib.DrawLine(fibStartPixel, pixelY, fibEndPixel, pixelY, FIB_618_COLOR)
+		DrawLine(fibStartPixel, pixelY, fibEndPixel, pixelY, FIB_618_COLOR)
+	}
+
+	// Draw strategy results
+	for result in multitool.strategyResults
+	{
+		boxX := Timestamp_ToPixelX(result.entryTimestamp, scaleData)
+		boxWidth := Timestamp_ToPixelX(result.exitTimestamp, scaleData) - boxX
+		boxX -= cameraPosX
+
+		if boxWidth == 0
+		{
+			continue
+		}
+
+		target := Price_ToPixelY(result.target, scaleData)
+		entry := Price_ToPixelY(result.entry, scaleData)
+		stopLoss := Price_ToPixelY(result.stopLoss, scaleData)
+
+		red := RED
+		red.a = 63
+		green := GREEN
+		green.a = 63
+
+		// Long
+		if result.target > result.stopLoss
+		{
+			boxY := target - cameraPosY
+			boxHeight := entry - target
+
+			DrawRectangle(boxX, boxY, boxWidth, boxHeight, green)
+
+			boxY = entry - cameraPosY
+			boxHeight = stopLoss - entry
+			
+			DrawRectangle(boxX, boxY, boxWidth, boxHeight, red)
+ 		}
+		else // Short
+		{
+			boxY := stopLoss - cameraPosY
+			boxHeight := entry - stopLoss
+
+			DrawRectangle(boxX, boxY, boxWidth, boxHeight, red)
+
+			boxY = entry - cameraPosY
+			boxHeight = target - entry
+			
+			DrawRectangle(boxX, boxY, boxWidth, boxHeight, green)
+		}
+	}
+
+	// Draw strategy winrate
+	if len(multitool.strategyResults) > 0
+	{
+		wins : f32 = f32(int(multitool.strategyResults[0].isWin))
+		losses : f32 = f32(int(!multitool.strategyResults[0].isWin))
+		winrate : f32 = wins / (wins + losses)
+
+		topY := Price_ToPixelY(multitool.high, scaleData) - cameraPosY
+		bottomY := Price_ToPixelY(multitool.low, scaleData) - cameraPosY
+		
+		startX := Timestamp_ToPixelX(multitool.strategyResults[0].exitTimestamp, scaleData) - cameraPosX
+		startY := topY + i32(f32(bottomY - topY) * (1 - winrate))
+
+		for _, index in multitool.strategyResults[1:]
+		{
+			wins += f32(int(multitool.strategyResults[index].isWin))
+			losses += f32(int(!multitool.strategyResults[index].isWin))
+			winrate = wins / (wins + losses)
+
+			endX := Timestamp_ToPixelX(multitool.strategyResults[index].exitTimestamp, scaleData) - cameraPosX
+			endY := topY + i32(f32(bottomY - topY) * (1 - winrate))
+
+			DrawLine(startX, startY, endX, endY, WHITE)
+
+			startX = endX
+			startY = endY
+		}
+
+		textBuffer : [8]u8
+		
+		fmt.bprintf(textBuffer[:], "%.2f%%\x00", winrate)
+		offsetY := MeasureTextEx(font, cstring(&textBuffer[0]), FONT_SIZE, 0).y / 2
+		DrawTextEx(font, cstring(&textBuffer[0]), Vector2{f32(startX + 2), f32(startY) - offsetY}, FONT_SIZE, 0, WHITE)
+	}
+}
+
+Multitool_DrawHandles :: proc(multitool : Multitool, cameraPosX : i32, cameraPosY : i32, scaleData : ScaleData)
+{
+	using raylib
+	
+	posX := Timestamp_ToPixelX(multitool.startTimestamp, scaleData)
+	posY := Price_ToPixelY(multitool.high, scaleData)
+	width := Timestamp_ToPixelX(multitool.endTimestamp, scaleData) - posX
+	height := Price_ToPixelY(multitool.low, scaleData) - posY
+	DrawRectangleLines(posX - cameraPosX, posY - cameraPosY, width, height, {255, 255, 255, 255})
+
+	if .VOLUME_PROFILE in multitool.tools
+	{
+		DrawCircle(posX + width - cameraPosX, VolumeProfile_BucketToPixelY(multitool.volumeProfile, multitool.volumeProfile.pocIndex, scaleData) - cameraPosY, LEVEL_CIRCLE_RADIUS, POC_COLOR)
+		DrawCircle(posX + width - cameraPosX, VolumeProfile_BucketToPixelY(multitool.volumeProfile, multitool.volumeProfile.valIndex, scaleData) - cameraPosY, LEVEL_CIRCLE_RADIUS, VAL_COLOR)
+		DrawCircle(posX + width - cameraPosX, VolumeProfile_BucketToPixelY(multitool.volumeProfile, multitool.volumeProfile.vahIndex, scaleData) - cameraPosY, LEVEL_CIRCLE_RADIUS, VAH_COLOR)
+		DrawCircle(posX + width - cameraPosX, VolumeProfile_BucketToPixelY(multitool.volumeProfile, multitool.volumeProfile.tvValIndex, scaleData) - cameraPosY, LEVEL_CIRCLE_RADIUS, TV_VAL_COLOR)
+		DrawCircle(posX + width - cameraPosX, VolumeProfile_BucketToPixelY(multitool.volumeProfile, multitool.volumeProfile.tvVahIndex, scaleData) - cameraPosY, LEVEL_CIRCLE_RADIUS, TV_VAH_COLOR)
+		DrawCircle(posX + width - cameraPosX, Price_ToPixelY(multitool.volumeProfile.vwap, scaleData) - cameraPosY, LEVEL_CIRCLE_RADIUS, VWAP_COLOR)
+	}
+	
+	if .FIB_RETRACEMENT in multitool.tools
+	{
+		priceRange := multitool.high - multitool.low
+
+		pixelY : i32 = ---
+
+		if multitool.isUpsideDown
+		{
+			pixelY = Price_ToPixelY(priceRange * (1 - 0.618) + multitool.low, scaleData) - cameraPosY
+		}
+		else
+		{
+			pixelY = Price_ToPixelY(priceRange * 0.618 + multitool.low, scaleData) - cameraPosY
+		}
+
+		DrawCircle(posX + width - cameraPosX, pixelY, LEVEL_CIRCLE_RADIUS, {255, 255, 127, 255})
 	}
 }

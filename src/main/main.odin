@@ -32,6 +32,7 @@ MouseState :: enum
 }
 
 profilerData : ProfilerData
+font : raylib.Font
 
 main :: proc()
 {
@@ -57,7 +58,7 @@ main :: proc()
 
     SetTargetFPS(60)
 
-	font := LoadFontEx("roboto-bold.ttf", FONT_SIZE, nil, 0)
+	font = LoadFontEx("roboto-bold.ttf", FONT_SIZE, nil, 0)
 
 	chart : Chart
 
@@ -292,24 +293,18 @@ main :: proc()
 			}
 		}
 
-		hoveredEdge := Edge.NONE
-		hoveredLevel := MultitoolLevel.NONE
+		hoveredHandle := MultitoolHandle.NONE
 
 		if selectedMultitool != nil
 		{
-			hoveredLevel = Multitool_LevelAtPoint(selectedMultitool^, GetMouseX() + cameraPosX, GetMouseY() + cameraPosY, scaleData)
-
-			if hoveredLevel == .NONE && mouseState == .NONE
-			{
-				hoveredEdge = Multitool_GetOverlappingEdge(selectedMultitool^, GetMouseX() + cameraPosX, GetMouseY() + cameraPosY, scaleData)
-			}
+			hoveredHandle = Multitool_HandleAt(selectedMultitool^, GetMouseX() + cameraPosX, GetMouseY() + cameraPosY, scaleData)
 		}
 	
 		// TODO: Hover least recently selected multitool when multiple are hovered
 		hoveredMultitool = nil
 		hoveredMultitoolIndex = -1
 
-		if hoveredEdge == .NONE
+		if hoveredHandle == .NONE
 		{
 			// Reverse order to match visual order
 			for i := len(multitools) - 1; i >= 0; i -= 1
@@ -323,12 +318,29 @@ main :: proc()
 			}
 		}
 
-		hoverCursors := [9]MouseCursor{.DEFAULT, .RESIZE_NWSE, .RESIZE_NS, .RESIZE_NESW, .RESIZE_EW, .RESIZE_EW, .RESIZE_NESW, .RESIZE_NS, .RESIZE_NWSE}
+		hoverCursors := [16]MouseCursor \
+		{
+			.DEFAULT,
+			.RESIZE_NWSE,
+			.RESIZE_NS,
+			.RESIZE_NESW,
+			.RESIZE_EW,
+			.RESIZE_EW,
+			.RESIZE_NESW,
+			.RESIZE_NS,
+			.RESIZE_NWSE,
+			.POINTING_HAND,
+			.POINTING_HAND,
+			.POINTING_HAND,
+			.POINTING_HAND,
+			.POINTING_HAND,
+			.POINTING_HAND,
+			.POINTING_HAND,
+		}
 
-		cursor := hoverCursors[hoveredEdge]
+		cursor := hoverCursors[hoveredHandle]
 
-		if hoveredLevel != .NONE ||
-		   hoveredMultitool != nil && (mouseState == .NONE || !mouseStateHasMoved)
+		if hoveredMultitool != nil && (mouseState == .NONE || !mouseStateHasMoved)
 		{
 			cursor = .POINTING_HAND
 		}
@@ -343,75 +355,77 @@ main :: proc()
 
 			if !IsKeyDown(.LEFT_SHIFT)
 			{
-				switch hoveredEdge
+				#partial switch hoveredHandle
 				{
-					case .TOPLEFT:
+					case .EDGE_TOPLEFT:
 					{
 						mouseState = .DRAG_DIAGONAL
 						mouseStateStartPrice = selectedMultitool.low
 						mouseStateStartZoomIndex = Chart_TimestampToTimeframe(chart, selectedMultitool.endTimestamp)
 						mouseStateStartCandleIndex = CandleList_TimestampToIndex(chart.candles[mouseStateStartZoomIndex], selectedMultitool.endTimestamp)
 					}
-					case .TOPRIGHT:
+					case .EDGE_TOPRIGHT:
 					{
 						mouseState = .DRAG_DIAGONAL
 						mouseStateStartPrice = selectedMultitool.low
 						mouseStateStartZoomIndex = Chart_TimestampToTimeframe(chart, selectedMultitool.startTimestamp)
 						mouseStateStartCandleIndex = CandleList_TimestampToIndex(chart.candles[mouseStateStartZoomIndex], selectedMultitool.startTimestamp)
 					}
-					case .BOTTOMLEFT:
+					case .EDGE_BOTTOMLEFT:
 					{
 						mouseState = .DRAG_DIAGONAL
 						mouseStateStartPrice = selectedMultitool.high
 						mouseStateStartZoomIndex = Chart_TimestampToTimeframe(chart, selectedMultitool.endTimestamp)
 						mouseStateStartCandleIndex = CandleList_TimestampToIndex(chart.candles[mouseStateStartZoomIndex], selectedMultitool.endTimestamp)
 					}
-					case .BOTTOMRIGHT:
+					case .EDGE_BOTTOMRIGHT:
 					{
 						mouseState = .DRAG_DIAGONAL
 						mouseStateStartPrice = selectedMultitool.high
 						mouseStateStartZoomIndex = Chart_TimestampToTimeframe(chart, selectedMultitool.startTimestamp)
 						mouseStateStartCandleIndex = CandleList_TimestampToIndex(chart.candles[mouseStateStartZoomIndex], selectedMultitool.startTimestamp)
 					}
-					case .TOP:
+					case .EDGE_TOP:
 					{
 						mouseState = .DRAG_VERTICAL
 						mouseStateStartPrice = selectedMultitool.low
 					}
-					case .LEFT:
+					case .EDGE_LEFT:
 					{
 						mouseState = .DRAG_HORIZONTAL
 						mouseStateStartZoomIndex = Chart_TimestampToTimeframe(chart, selectedMultitool.endTimestamp)
 						mouseStateStartCandleIndex = CandleList_TimestampToIndex(chart.candles[mouseStateStartZoomIndex], selectedMultitool.endTimestamp)
 					}
-					case .RIGHT:
+					case .EDGE_RIGHT:
 					{
 						mouseState = .DRAG_HORIZONTAL
 						mouseStateStartZoomIndex = Chart_TimestampToTimeframe(chart, selectedMultitool.startTimestamp)
 						mouseStateStartCandleIndex = CandleList_TimestampToIndex(chart.candles[mouseStateStartZoomIndex], selectedMultitool.startTimestamp)
 					}
-					case .BOTTOM:
+					case .EDGE_BOTTOM:
 					{
 						mouseState = .DRAG_VERTICAL
 						mouseStateStartPrice = selectedMultitool.high
 					}
-					case .NONE: mouseState = .PAN
+					case: mouseState = .PAN
 				}
 			}
 			else
 			{
 				mouseState = .DRAG_DIAGONAL
 				append(&multitools, Multitool{})
+
+				if selectedMultitool != nil &&
+				   selectedMultitool.tools == nil
+				{
+					unordered_remove(&multitools, selectedMultitoolIndex)
+				}
+				
 				selectedMultitool = &multitools[len(multitools) - 1]
 				selectedMultitoolIndex = len(multitools) - 1
 
-				selectedMultitool.drawPoc = true
-				selectedMultitool.drawVal = true
-				selectedMultitool.drawVah = true
-				selectedMultitool.drawTvVal = true
-				selectedMultitool.drawTvVah = true
-				selectedMultitool.drawVwap = true
-				selectedMultitool.draw618 = true
+				selectedMultitool.tools = {.VOLUME_PROFILE}
+				selectedMultitool.volumeProfileDrawFlags = {.BODY, .POC, .VAL, .VAH, .TV_VAL, .TV_VAH, .VWAP}
 
 				newStartTimestamp : i32
 				newEndTimestamp : i32
@@ -446,17 +460,22 @@ main :: proc()
 		{
 			if mouseState == .PAN && !mouseStateHasMoved
 			{
-				switch hoveredLevel
+				#partial switch hoveredHandle
 				{
-					case .POC: selectedMultitool.drawPoc = !selectedMultitool.drawPoc
-					case .VAL: selectedMultitool.drawVal = !selectedMultitool.drawVal
-					case .VAH: selectedMultitool.drawVah = !selectedMultitool.drawVah
-					case .TV_VAL: selectedMultitool.drawTvVal = !selectedMultitool.drawTvVal
-					case .TV_VAH: selectedMultitool.drawTvVah = !selectedMultitool.drawTvVah
-					case .VWAP: selectedMultitool.drawVwap = !selectedMultitool.drawVwap
-					case .FIB_618: selectedMultitool.draw618 = !selectedMultitool.draw618
+					case .POC: selectedMultitool.volumeProfileDrawFlags ~= {.POC}
+					case .VAL: selectedMultitool.volumeProfileDrawFlags ~= {.VAL}
+					case .VAH: selectedMultitool.volumeProfileDrawFlags ~= {.VAH}
+					case .TV_VAL: selectedMultitool.volumeProfileDrawFlags ~= {.TV_VAL}
+					case .TV_VAH: selectedMultitool.volumeProfileDrawFlags ~= {.TV_VAH}
+					case .VWAP: selectedMultitool.volumeProfileDrawFlags ~= {.VWAP}
 					case .NONE:
 					{
+						if selectedMultitool != nil &&
+						   selectedMultitool.tools == nil
+						{
+							unordered_remove(&multitools, selectedMultitoolIndex)
+						}
+				
 						selectedMultitool = hoveredMultitool
 						selectedMultitoolIndex = hoveredMultitoolIndex
 					}
@@ -568,6 +587,12 @@ main :: proc()
 		if IsMouseButtonReleased(.RIGHT)
 		{
 			rightDragging = false
+		}
+
+		if IsKeyPressed(.T) &&
+		   selectedMultitool != nil
+		{
+			Calculate(chart, selectedMultitool, dailyCloseLevels.levels[:], 1.01, 1.01)
 		}
 
 		if rightDragging
@@ -1207,7 +1232,7 @@ main :: proc()
 		// Draw Candle Close Levels
 		if drawCloseLevels
 		{
-			levelsSlice := []CandleCloseLevels{dailyCloseLevels, weeklyCloseLevels}
+			levelsSlice := []CandleCloseLevels{dailyCloseLevels}
 
 			for closeLevels in levelsSlice
 			{
@@ -1302,16 +1327,6 @@ main :: proc()
 			}
 		}
 
-		for multitool in multitools
-		{
-			startPixel := Timestamp_ToPixelX(multitool.startTimestamp, scaleData)
-			width := Timestamp_ToPixelX(multitool.endTimestamp, scaleData) - startPixel
-			if Multitool_IsOverlappingRect(multitool, cameraPosX, cameraPosY, screenWidth, screenHeight, scaleData)
-			{
-				VolumeProfile_DrawBody(multitool.volumeProfile, startPixel - cameraPosX, width, cameraPosY, scaleData, 100)
-			}
-		}
-
 		// [0] = green, [1] = red
 		candleColors := [2]Color{{0, 255, 0, 255}, {255, 0, 0, 255}}
 
@@ -1354,7 +1369,7 @@ main :: proc()
 				startPixel := CandleList_IndexToPixelX(chart.candles[Timeframe.WEEK], i32(i) + 1, scaleData)
 				endPixel := CandleList_IndexToPixelX(chart.candles[Timeframe.WEEK], i32(i) + 2, scaleData)
 
-				VolumeProfile_DrawLevels(chart.weeklyVolumeProfiles[i], startPixel - cameraPosX, endPixel - startPixel, cameraPosY, scaleData, 95)
+				VolumeProfile_Draw(chart.weeklyVolumeProfiles[i], startPixel - cameraPosX, endPixel - startPixel, cameraPosY, scaleData, 95, {.POC, .VAL, .VAH, .TV_VAL, .TV_VAH, .VWAP})
 			}
 		}
 
@@ -1383,7 +1398,7 @@ main :: proc()
 				startPixel := CandleList_IndexToPixelX(chart.candles[Timeframe.DAY], i32(i) + 1, scaleData)
 				endPixel := CandleList_IndexToPixelX(chart.candles[Timeframe.DAY], i32(i) + 2, scaleData)
 
-				VolumeProfile_DrawLevels(chart.dailyVolumeProfiles[i], startPixel - cameraPosX, endPixel - startPixel, cameraPosY, scaleData, 63)
+				VolumeProfile_Draw(chart.dailyVolumeProfiles[i], startPixel - cameraPosX, endPixel - startPixel, cameraPosY, scaleData, 63, {.POC, .VAL, .VAH, .TV_VAL, .TV_VAH, .VWAP})
 			}
 		}
 
@@ -1447,35 +1462,7 @@ main :: proc()
 
 		if selectedMultitool != nil
 		{
-			posX := Timestamp_ToPixelX(selectedMultitool.startTimestamp, scaleData)
-			posY := Price_ToPixelY(selectedMultitool.high, scaleData)
-			width := Timestamp_ToPixelX(selectedMultitool.endTimestamp, scaleData) - posX
-			height := Price_ToPixelY(selectedMultitool.low, scaleData) - posY
-			DrawRectangleLines(posX - cameraPosX, posY - cameraPosY, width, height, {255, 255, 255, 255})
-
-			// Draw VolumeProfile circles
-			DrawCircle(posX + width - cameraPosX, VolumeProfile_BucketToPixelY(selectedMultitool.volumeProfile, selectedMultitool.volumeProfile.pocIndex, scaleData) - cameraPosY, LEVEL_CIRCLE_RADIUS, POC_COLOR)
-			DrawCircle(posX + width - cameraPosX, VolumeProfile_BucketToPixelY(selectedMultitool.volumeProfile, selectedMultitool.volumeProfile.valIndex, scaleData) - cameraPosY, LEVEL_CIRCLE_RADIUS, VAL_COLOR)
-			DrawCircle(posX + width - cameraPosX, VolumeProfile_BucketToPixelY(selectedMultitool.volumeProfile, selectedMultitool.volumeProfile.vahIndex, scaleData) - cameraPosY, LEVEL_CIRCLE_RADIUS, VAH_COLOR)
-			DrawCircle(posX + width - cameraPosX, VolumeProfile_BucketToPixelY(selectedMultitool.volumeProfile, selectedMultitool.volumeProfile.tvValIndex, scaleData) - cameraPosY, LEVEL_CIRCLE_RADIUS, TV_VAL_COLOR)
-			DrawCircle(posX + width - cameraPosX, VolumeProfile_BucketToPixelY(selectedMultitool.volumeProfile, selectedMultitool.volumeProfile.tvVahIndex, scaleData) - cameraPosY, LEVEL_CIRCLE_RADIUS, TV_VAH_COLOR)
-			DrawCircle(posX + width - cameraPosX, Price_ToPixelY(selectedMultitool.volumeProfile.vwap, scaleData) - cameraPosY, LEVEL_CIRCLE_RADIUS, VWAP_COLOR)
-			
-			// Draw 618
-			priceRange := selectedMultitool.high - selectedMultitool.low
-
-			pixelY : i32 = ---
-
-			if selectedMultitool.isUpsideDown
-			{
-				pixelY = Price_ToPixelY(priceRange * (1 - 0.618) + selectedMultitool.low, scaleData) - cameraPosY
-			}
-			else
-			{
-				pixelY = Price_ToPixelY(priceRange * 0.618 + selectedMultitool.low, scaleData) - cameraPosY
-			}
-
-			DrawCircle(posX + width - cameraPosX, pixelY, LEVEL_CIRCLE_RADIUS, {255, 255, 127, 255})
+			Multitool_DrawHandles(selectedMultitool^, cameraPosX, cameraPosY, scaleData)
 		}
 
 		// Draw Crosshair
