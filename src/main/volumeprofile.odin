@@ -6,10 +6,10 @@ import "core:math"
 import "vendor:raylib"
 
 POC_COLOR :: raylib.RED
-VAL_COLOR :: raylib.BLUE
-VAH_COLOR :: raylib.BLUE
-TV_VAL_COLOR :: raylib.SKYBLUE
-TV_VAH_COLOR :: raylib.SKYBLUE
+VAL_COLOR :: raylib.SKYBLUE
+VAH_COLOR :: raylib.SKYBLUE
+TV_VAL_COLOR :: raylib.BLUE
+TV_VAH_COLOR :: raylib.BLUE
 VWAP_COLOR :: raylib.PURPLE
 
 VolumeProfilePool :: struct
