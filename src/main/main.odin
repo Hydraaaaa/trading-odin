@@ -505,7 +505,7 @@ main :: proc()
 					else
 					{
 						newStartTimestamp = cursorCandleTimestamp
-						newEndTimestamp = mouseSelectionStartTimestamp
+						newEndTimestamp = mouseSelectionStartTimestamp + candleTimeframeIncrements[zoomIndex]
 					}
 
 					minZoomIndex := math.min(zoomIndex, mouseSelectionStartZoomIndex)
@@ -558,7 +558,7 @@ main :: proc()
 					else
 					{
 						newStartTimestamp = cursorCandleTimestamp
-						newEndTimestamp = mouseSelectionStartTimestamp
+						newEndTimestamp = mouseSelectionStartTimestamp + candleTimeframeIncrements[zoomIndex]
 					}
 					
 					minZoomIndex := math.min(zoomIndex, mouseSelectionStartZoomIndex)
@@ -572,7 +572,7 @@ main :: proc()
 					selectedMultitool.endTimestamp = newEndTimestamp
 					
 					// Check for a flipping of coordinates
-					if (newStartTimestamp > newEndTimestamp) == (selectedHandle == .EDGE_LEFT)
+					if (cursorCandleTimestamp > mouseSelectionStartTimestamp) == (selectedHandle == .EDGE_LEFT)
 					{
 						if selectedHandle == .EDGE_LEFT
 						{
