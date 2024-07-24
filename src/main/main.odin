@@ -499,27 +499,29 @@ main :: proc()
 
 					if cursorCandleTimestamp >= mouseSelectionStartTimestamp
 					{
+						#partial switch selectedHandle
+						{
+							case .EDGE_TOPLEFT: selectedHandle = .EDGE_TOPRIGHT; mouseSelectionStartTimestamp -= candleTimeframeIncrements[zoomIndex]
+							case .EDGE_BOTTOMLEFT: selectedHandle = .EDGE_BOTTOMRIGHT; mouseSelectionStartTimestamp -= candleTimeframeIncrements[zoomIndex];
+						}
+						
 						newStartTimestamp = mouseSelectionStartTimestamp
 						newEndTimestamp = cursorCandleTimestamp + candleTimeframeIncrements[zoomIndex]
 					}
 					else
 					{
+						#partial switch selectedHandle
+						{
+							case .EDGE_TOPRIGHT: selectedHandle = .EDGE_TOPLEFT; mouseSelectionStartTimestamp += candleTimeframeIncrements[zoomIndex]
+							case .EDGE_BOTTOMRIGHT: selectedHandle = .EDGE_BOTTOMLEFT; mouseSelectionStartTimestamp += candleTimeframeIncrements[zoomIndex]
+						}
+						
 						newStartTimestamp = cursorCandleTimestamp
-						newEndTimestamp = mouseSelectionStartTimestamp + candleTimeframeIncrements[zoomIndex]
+						newEndTimestamp = mouseSelectionStartTimestamp
 					}
 
-					minZoomIndex := math.min(zoomIndex, mouseSelectionStartZoomIndex)
-
-					VolumeProfile_Resize(&selectedMultitool.volumeProfile, selectedMultitool.startTimestamp, selectedMultitool.endTimestamp, newStartTimestamp, newEndTimestamp, chart)
-
-					selectedMultitool.startTimestamp = newStartTimestamp
-					selectedMultitool.endTimestamp = newEndTimestamp
-					selectedMultitool.high = math.max(mouseSelectionStartPrice, cursorSnapPrice)
-					selectedMultitool.low = math.min(mouseSelectionStartPrice, cursorSnapPrice)
-					
 					// Check for flipping of coordinates
 					isBottomEdge := selectedHandle == .EDGE_BOTTOMLEFT || selectedHandle == .EDGE_BOTTOMRIGHT
-					isLeftEdge := selectedHandle == .EDGE_TOPLEFT || selectedHandle == .EDGE_BOTTOMLEFT
 
 					if (mouseSelectionStartPrice < cursorSnapPrice) == isBottomEdge
 					{
@@ -533,16 +535,12 @@ main :: proc()
 						}
 					}
 					
-					if (cursorCandleTimestamp > mouseSelectionStartTimestamp) == isLeftEdge
-					{
-						#partial switch selectedHandle
-						{
-							case .EDGE_TOPLEFT: selectedHandle = .EDGE_TOPRIGHT
-							case .EDGE_BOTTOMLEFT: selectedHandle = .EDGE_BOTTOMRIGHT
-							case .EDGE_TOPRIGHT: selectedHandle = .EDGE_TOPLEFT
-							case .EDGE_BOTTOMRIGHT: selectedHandle = .EDGE_BOTTOMLEFT
-						}
-					}
+					VolumeProfile_Resize(&selectedMultitool.volumeProfile, selectedMultitool.startTimestamp, selectedMultitool.endTimestamp, newStartTimestamp, newEndTimestamp, chart)
+
+					selectedMultitool.startTimestamp = newStartTimestamp
+					selectedMultitool.endTimestamp = newEndTimestamp
+					selectedMultitool.high = math.max(mouseSelectionStartPrice, cursorSnapPrice)
+					selectedMultitool.low = math.min(mouseSelectionStartPrice, cursorSnapPrice)
 				}
 				case .EDGE_LEFT, .EDGE_RIGHT:
 				{
@@ -552,37 +550,31 @@ main :: proc()
 
 					if cursorCandleTimestamp >= mouseSelectionStartTimestamp
 					{
+						if selectedHandle == .EDGE_LEFT
+						{
+							selectedHandle = .EDGE_RIGHT
+							mouseSelectionStartTimestamp -= candleTimeframeIncrements[zoomIndex]
+						}
+						
 						newStartTimestamp = mouseSelectionStartTimestamp
 						newEndTimestamp = cursorCandleTimestamp + candleTimeframeIncrements[zoomIndex]
 					}
 					else
 					{
+						if selectedHandle == .EDGE_RIGHT
+						{
+							selectedHandle = .EDGE_LEFT
+							mouseSelectionStartTimestamp += candleTimeframeIncrements[zoomIndex]
+						}
+						
 						newStartTimestamp = cursorCandleTimestamp
-						newEndTimestamp = mouseSelectionStartTimestamp + candleTimeframeIncrements[zoomIndex]
+						newEndTimestamp = mouseSelectionStartTimestamp
 					}
-					
-					minZoomIndex := math.min(zoomIndex, mouseSelectionStartZoomIndex)
-
-					startIndex := CandleList_TimestampToIndex(chart.candles[minZoomIndex], newStartTimestamp)
-					endIndex := CandleList_TimestampToIndex(chart.candles[minZoomIndex], newEndTimestamp)
 
 					VolumeProfile_Resize(&selectedMultitool.volumeProfile, selectedMultitool.startTimestamp, selectedMultitool.endTimestamp, newStartTimestamp, newEndTimestamp, chart)
 
 					selectedMultitool.startTimestamp = newStartTimestamp
 					selectedMultitool.endTimestamp = newEndTimestamp
-					
-					// Check for a flipping of coordinates
-					if (cursorCandleTimestamp > mouseSelectionStartTimestamp) == (selectedHandle == .EDGE_LEFT)
-					{
-						if selectedHandle == .EDGE_LEFT
-						{
-							selectedHandle = .EDGE_RIGHT
-						}
-						else
-						{
-							selectedHandle = .EDGE_LEFT
-						}
-					}
 				}
 				case .EDGE_TOP, .EDGE_BOTTOM:
 				{
@@ -590,17 +582,17 @@ main :: proc()
 					selectedMultitool.low = math.min(mouseSelectionStartPrice, cursorSnapPrice)
 					
 					// Check for a flipping of coordinates
-					if (mouseSelectionStartPrice < cursorSnapPrice) == (selectedHandle == .EDGE_BOTTOM)
+					if mouseSelectionStartPrice < cursorSnapPrice &&
+					   selectedHandle == .EDGE_BOTTOM
 					{
-						selectedMultitool.isUpsideDown = !selectedMultitool.isUpsideDown
-						if selectedHandle == .EDGE_BOTTOM
-						{
-							selectedHandle = .EDGE_TOP
-						}
-						else
-						{
-							selectedHandle = .EDGE_BOTTOM
-						}
+						selectedMultitool.isUpsideDown = false
+						selectedHandle = .EDGE_TOP
+					}
+					else if mouseSelectionStartPrice > cursorSnapPrice &&
+					        selectedHandle == .EDGE_TOP
+					{
+						selectedMultitool.isUpsideDown = true
+						selectedHandle = .EDGE_BOTTOM
 					}
 				}
 				case:
