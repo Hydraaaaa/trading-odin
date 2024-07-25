@@ -1443,24 +1443,20 @@ main :: proc()
 				lowestDelta = math.min(lowestDelta, delta)
 			}
 
-			cvdDeltaRange := highestDelta - lowestDelta
+			deltaRange := highestDelta - lowestDelta
 
 			highestCandleY := Price_ToPixelY(highestClose, scaleData) - cameraPosY
 			lowestCandleY := Price_ToPixelY(lowestClose, scaleData) - cameraPosY
 
-			prevX := CandleList_IndexToPixelX(chart.candles[zoomIndex], visibleCandlesStartIndex + 1, scaleData) - cameraPosX
-			prevY := i32(f32((visibleDeltas[0] - lowestDelta) / cvdDeltaRange) * pixelRange + lowestPixel)
+			points : [1000]Vector2 = ---
 
-			for delta, i in visibleDeltas[1:]
+			for delta, i in visibleDeltas
 			{
-				x := CandleList_IndexToPixelX(chart.candles[zoomIndex], visibleCandlesStartIndex + i32(i) + 2, scaleData) - cameraPosX
-				y := i32(f32((delta - lowestDelta) / cvdDeltaRange) * pixelRange + lowestPixel)
-
-				DrawLine(prevX, prevY, x, y, Color{255, 255, 255, 191})
-
-				prevX = x
-				prevY = y
+				points[i].x = f32(CandleList_IndexToPixelX(chart.candles[zoomIndex], visibleCandlesStartIndex + i32(i) + 1, scaleData) - cameraPosX)
+				points[i].y = f32((delta - lowestDelta) / deltaRange) * pixelRange + lowestPixel
 			}
+
+			DrawLineStrip(raw_data(points[:]), i32(len(visibleDeltas)), Color{255, 255, 255, 191})
 		}
 
 		for multitool in multitools
