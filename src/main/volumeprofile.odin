@@ -5,6 +5,8 @@ import "core:math"
 
 import "vendor:raylib"
 
+VOLUME_PROFILE_BUY_COLOR :: raylib.Color{41, 98, 255, 255} // Matching TradingView
+VOLUME_PROFILE_SELL_COLOR :: raylib.Color{251, 192, 45, 255} // Matching TradingView
 POC_COLOR :: raylib.RED
 VAL_COLOR :: raylib.SKYBLUE
 VAH_COLOR :: raylib.SKYBLUE
@@ -569,9 +571,9 @@ VolumeProfile_Draw :: proc(profile : VolumeProfile, \
             buyPixels := i32(buyVolume / highestBucketVolume * f32(width))
             sellPixels := i32((totalVolume - buyVolume) / highestBucketVolume * f32(width))
 
-            blueColor := BLUE
+            blueColor := VOLUME_PROFILE_BUY_COLOR
             blueColor.a = alpha
-            orangeColor := ORANGE
+            orangeColor := VOLUME_PROFILE_SELL_COLOR
             orangeColor.a = alpha
 
             DrawRectangle(posX, bucketEndPixel, buyPixels, bucketThickness, blueColor)

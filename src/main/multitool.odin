@@ -8,6 +8,14 @@ import "vendor:raylib"
 LEVEL_CIRCLE_RADIUS :: 5
 FIB_618_COLOR :: raylib.Color{255, 255, 127, 255}
 
+HOTBAR_CELL_SIZE :: 32
+HOTBAR_SPACING :: 1
+HOTBAR_CELL_COUNT :: 2
+HOTBAR_ROUNDING :: 0.25
+
+HOTBAR_WIDTH :: HOTBAR_CELL_SIZE * HOTBAR_CELL_COUNT + HOTBAR_SPACING * (HOTBAR_CELL_COUNT + 1)
+HOTBAR_HEIGHT :: HOTBAR_CELL_SIZE + HOTBAR_SPACING * 2
+
 Tool :: enum
 {
 	VOLUME_PROFILE,
@@ -43,6 +51,7 @@ MultitoolHandle :: enum
 	EDGE_BOTTOMLEFT,
 	EDGE_BOTTOM,
 	EDGE_BOTTOMRIGHT,
+	VOLUME_PROFILE_BODY,
 	POC,
 	VAL,
 	VAH,
@@ -50,6 +59,8 @@ MultitoolHandle :: enum
 	TV_VAH,
 	VWAP,
 	FIB_618,
+	HOTBAR_VOLUME_PROFILE,
+	HOTBAR_FIB_RETRACEMENT,
 }
 
 Multitool_Destroy :: proc(multitool : Multitool)
@@ -136,136 +147,6 @@ Multitool_IsOverlappingRect :: proc(multitool : Multitool, posX : i32, posY : i3
 	       profileLow <= high &&
 	       multitool.startTimestamp <= endTimestamp &&
 	       multitool.endTimestamp + (multitool.endTimestamp - multitool.startTimestamp) >= startTimestamp
-}
-
-Multitool_HandleAt :: proc(multitool : Multitool, posX : i32, posY : i32, scaleData : ScaleData) -> MultitoolHandle
-{
-	SQR_RADIUS :: LEVEL_CIRCLE_RADIUS * LEVEL_CIRCLE_RADIUS
-	
-	// Circle overlap helper values
-	distX := Timestamp_ToPixelX(multitool.endTimestamp, scaleData) - posX
-	targetSqrDistY := SQR_RADIUS - distX * distX
-
-	if .VOLUME_PROFILE in multitool.tools
-	{
-		levelY := Price_ToPixelY(multitool.volumeProfile.vwap, scaleData)
-		distY := levelY - posY
-		if distY * distY < targetSqrDistY { return .VWAP }
-
-		levelY = Price_ToPixelY(VolumeProfile_BucketToPrice(multitool.volumeProfile, multitool.volumeProfile.pocIndex), scaleData)
-		distY = levelY - posY
-		if distY * distY < targetSqrDistY { return .POC }
-
-		levelY = Price_ToPixelY(VolumeProfile_BucketToPrice(multitool.volumeProfile, multitool.volumeProfile.valIndex), scaleData)
-		distY = levelY - posY
-		if distY * distY < targetSqrDistY { return .VAL }
-
-		levelY = Price_ToPixelY(VolumeProfile_BucketToPrice(multitool.volumeProfile, multitool.volumeProfile.vahIndex), scaleData)
-		distY = levelY - posY
-		if distY * distY < targetSqrDistY { return .VAH }
-
-		levelY = Price_ToPixelY(VolumeProfile_BucketToPrice(multitool.volumeProfile, multitool.volumeProfile.tvValIndex), scaleData)
-		distY = levelY - posY
-		if distY * distY < targetSqrDistY { return .TV_VAL }
-
-		levelY = Price_ToPixelY(VolumeProfile_BucketToPrice(multitool.volumeProfile, multitool.volumeProfile.tvVahIndex), scaleData)
-		distY = levelY - posY
-		if distY * distY < targetSqrDistY { return .TV_VAH }
-	}
-
-	if .FIB_RETRACEMENT in multitool.tools
-	{
-		levelY : i32 = ---
-
-		priceRange := multitool.high - multitool.low
-
-		if multitool.isUpsideDown
-		{
-			levelY = Price_ToPixelY(priceRange * 0.618 + multitool.low, scaleData)
-		}
-		else
-		{
-			levelY = Price_ToPixelY(priceRange * (1 - 0.618) + multitool.low, scaleData)
-		}
-
-		distY := levelY - posY
-		if distY * distY < targetSqrDistY { return .FIB_618 }
-	}
-
-	EDGE_THICKNESS :: 3
-
-	leftPos := Timestamp_ToPixelX(multitool.startTimestamp, scaleData)
-	rightPos := Timestamp_ToPixelX(multitool.endTimestamp, scaleData)
-	topPos := Price_ToPixelY(multitool.high, scaleData)
-	bottomPos := Price_ToPixelY(multitool.low, scaleData)
-
-	// Corners
-	if posX >= leftPos - EDGE_THICKNESS &&
-	   posX <= leftPos + EDGE_THICKNESS &&
-	   posY >= topPos - EDGE_THICKNESS &&
-	   posY <= topPos + EDGE_THICKNESS
-	{
-		return .EDGE_TOPLEFT
-	}
-
-	if posX >= rightPos - EDGE_THICKNESS &&
-	   posX <= rightPos + EDGE_THICKNESS &&
-	   posY >= topPos - EDGE_THICKNESS &&
-	   posY <= topPos + EDGE_THICKNESS
-	{
-		return .EDGE_TOPRIGHT
-	}
-
-	if posX >= leftPos - EDGE_THICKNESS &&
-	   posX <= leftPos + EDGE_THICKNESS &&
-	   posY >= bottomPos - EDGE_THICKNESS &&
-	   posY <= bottomPos + EDGE_THICKNESS
-	{
-		return .EDGE_BOTTOMLEFT
-	}
-
-	if posX >= rightPos - EDGE_THICKNESS &&
-	   posX <= rightPos + EDGE_THICKNESS &&
-	   posY >= bottomPos - EDGE_THICKNESS &&
-	   posY <= bottomPos + EDGE_THICKNESS
-	{
-		return .EDGE_BOTTOMRIGHT
-	}
-
-	// Edges
-	if posX >= leftPos - EDGE_THICKNESS &&
-	   posX <= rightPos + EDGE_THICKNESS &&
-	   posY >= topPos - EDGE_THICKNESS &&
-	   posY <= topPos + EDGE_THICKNESS
-	{
-		return .EDGE_TOP
-	}
-
-	if posX >= leftPos - EDGE_THICKNESS &&
-	   posX <= leftPos + EDGE_THICKNESS &&
-	   posY >= topPos - EDGE_THICKNESS &&
-	   posY <= bottomPos + EDGE_THICKNESS
-	{
-		return .EDGE_LEFT
-	}
-
-	if posX >= rightPos - EDGE_THICKNESS &&
-	   posX <= rightPos + EDGE_THICKNESS &&
-	   posY >= topPos - EDGE_THICKNESS &&
-	   posY <= bottomPos + EDGE_THICKNESS
-	{
-		return .EDGE_RIGHT
-	}
-
-	if posX >= leftPos - EDGE_THICKNESS &&
-	   posX <= rightPos + EDGE_THICKNESS &&
-	   posY >= bottomPos - EDGE_THICKNESS &&
-	   posY <= bottomPos + EDGE_THICKNESS
-	{
-		return .EDGE_BOTTOM
-	}
-
-	return .NONE
 }
 
 Multitool_Draw :: proc(multitool : Multitool, cameraPosX : i32, cameraPosY : i32, scaleData : ScaleData)
@@ -437,6 +318,7 @@ Multitool_DrawHandles :: proc(multitool : Multitool, cameraPosX : i32, cameraPos
 
 	if .VOLUME_PROFILE in multitool.tools
 	{
+		DrawCircle(posX - cameraPosX, VolumeProfile_BucketToPixelY(multitool.volumeProfile, multitool.volumeProfile.pocIndex, scaleData) - cameraPosY, LEVEL_CIRCLE_RADIUS, VOLUME_PROFILE_BUY_COLOR)
 		DrawCircle(posX + width - cameraPosX, VolumeProfile_BucketToPixelY(multitool.volumeProfile, multitool.volumeProfile.pocIndex, scaleData) - cameraPosY, LEVEL_CIRCLE_RADIUS, POC_COLOR)
 		DrawCircle(posX + width - cameraPosX, VolumeProfile_BucketToPixelY(multitool.volumeProfile, multitool.volumeProfile.valIndex, scaleData) - cameraPosY, LEVEL_CIRCLE_RADIUS, VAL_COLOR)
 		DrawCircle(posX + width - cameraPosX, VolumeProfile_BucketToPixelY(multitool.volumeProfile, multitool.volumeProfile.vahIndex, scaleData) - cameraPosY, LEVEL_CIRCLE_RADIUS, VAH_COLOR)
@@ -462,4 +344,207 @@ Multitool_DrawHandles :: proc(multitool : Multitool, cameraPosX : i32, cameraPos
 
 		DrawCircle(posX + width - cameraPosX, pixelY, LEVEL_CIRCLE_RADIUS, {255, 255, 127, 255})
 	}
+
+	// Hotbar
+	HOTBAR_COLOR :: raylib.Color{30, 34, 45, 255}
+	HOTBAR_SELECTED_COLOR :: raylib.Color{42, 46, 57, 255}
+
+	hotbarX := posX + width / 2 - HOTBAR_WIDTH / 2 - cameraPosX
+	hotbarY := posY + height - HOTBAR_HEIGHT - 8 - cameraPosY
+
+	DrawRectangleRounded({f32(hotbarX), f32(hotbarY), HOTBAR_WIDTH, HOTBAR_HEIGHT}, HOTBAR_ROUNDING, 16, HOTBAR_COLOR)
+
+	cellX := hotbarX + HOTBAR_SPACING
+	cellY := hotbarY + HOTBAR_SPACING
+
+	if .VOLUME_PROFILE in multitool.tools
+	{
+		DrawRectangleRounded({f32(cellX), f32(cellY), HOTBAR_CELL_SIZE, HOTBAR_CELL_SIZE}, HOTBAR_ROUNDING, 16, HOTBAR_SELECTED_COLOR)
+	}
+
+	DrawTexture(volumeProfileIcon, cellX, cellY, WHITE)
+
+	cellX += HOTBAR_CELL_SIZE + HOTBAR_SPACING
+
+	if .FIB_RETRACEMENT in multitool.tools
+	{
+		DrawRectangleRounded({f32(cellX), f32(cellY), HOTBAR_CELL_SIZE, HOTBAR_CELL_SIZE}, HOTBAR_ROUNDING, 16, HOTBAR_SELECTED_COLOR)
+	}
+	
+	DrawTexture(fibRetracementIcon, cellX, cellY, WHITE)
+}
+
+Multitool_HandleAt :: proc(multitool : Multitool, posX : i32, posY : i32, scaleData : ScaleData) -> MultitoolHandle
+{
+	SQR_RADIUS :: LEVEL_CIRCLE_RADIUS * LEVEL_CIRCLE_RADIUS
+	
+	leftPos := Timestamp_ToPixelX(multitool.startTimestamp, scaleData)
+	rightPos := Timestamp_ToPixelX(multitool.endTimestamp, scaleData)
+	topPos := Price_ToPixelY(multitool.high, scaleData)
+	bottomPos := Price_ToPixelY(multitool.low, scaleData)
+	width := rightPos - leftPos
+	height := bottomPos - topPos
+	
+	// Hotbar
+	hotbarX := leftPos + width / 2 - HOTBAR_WIDTH / 2
+	hotbarY := topPos + height - HOTBAR_HEIGHT - 8
+
+	if posX >= leftPos &&
+	   posX < rightPos &&
+	   posY >= topPos &&
+	   posY < bottomPos
+	{
+		cellX := hotbarX + HOTBAR_SPACING
+		cellY := hotbarY + HOTBAR_SPACING
+
+		if posX >= cellX &&
+		   posY >= cellY &&
+		   posX < cellX + HOTBAR_CELL_SIZE &&
+		   posY < cellY + HOTBAR_CELL_SIZE
+		{
+			return .HOTBAR_VOLUME_PROFILE
+		}
+
+		cellX += HOTBAR_CELL_SIZE + HOTBAR_SPACING
+		
+		if posX >= cellX &&
+		   posY >= cellY &&
+		   posX < cellX + HOTBAR_CELL_SIZE &&
+		   posY < cellY + HOTBAR_CELL_SIZE
+		{
+			return .HOTBAR_FIB_RETRACEMENT
+		}
+
+		return .NONE
+	}
+	
+	// Circle overlap helper values
+	distX := rightPos - posX
+	targetSqrDistY := SQR_RADIUS - distX * distX
+
+	if .VOLUME_PROFILE in multitool.tools
+	{
+		// Right side of profile
+		levelY := Price_ToPixelY(multitool.volumeProfile.vwap, scaleData)
+		distY := levelY - posY
+		if distY * distY < targetSqrDistY { return .VWAP }
+		
+		levelY = Price_ToPixelY(VolumeProfile_BucketToPrice(multitool.volumeProfile, multitool.volumeProfile.pocIndex), scaleData)
+		distY = levelY - posY
+		if distY * distY < targetSqrDistY { return .POC }
+
+		levelY = Price_ToPixelY(VolumeProfile_BucketToPrice(multitool.volumeProfile, multitool.volumeProfile.valIndex), scaleData)
+		distY = levelY - posY
+		if distY * distY < targetSqrDistY { return .VAL }
+
+		levelY = Price_ToPixelY(VolumeProfile_BucketToPrice(multitool.volumeProfile, multitool.volumeProfile.vahIndex), scaleData)
+		distY = levelY - posY
+		if distY * distY < targetSqrDistY { return .VAH }
+
+		levelY = Price_ToPixelY(VolumeProfile_BucketToPrice(multitool.volumeProfile, multitool.volumeProfile.tvValIndex), scaleData)
+		distY = levelY - posY
+		if distY * distY < targetSqrDistY { return .TV_VAL }
+
+		levelY = Price_ToPixelY(VolumeProfile_BucketToPrice(multitool.volumeProfile, multitool.volumeProfile.tvVahIndex), scaleData)
+		distY = levelY - posY
+		if distY * distY < targetSqrDistY { return .TV_VAH }
+
+		// Left side of profile
+		distX = leftPos - posX
+		targetSqrDistY = SQR_RADIUS - distX * distX
+		
+		levelY = Price_ToPixelY(VolumeProfile_BucketToPrice(multitool.volumeProfile, multitool.volumeProfile.pocIndex), scaleData)
+		distY = levelY - posY
+		if distY * distY < targetSqrDistY { return .VOLUME_PROFILE_BODY }
+
+	}
+
+	if .FIB_RETRACEMENT in multitool.tools
+	{
+		levelY : i32 = ---
+
+		priceRange := multitool.high - multitool.low
+
+		if multitool.isUpsideDown
+		{
+			levelY = Price_ToPixelY(priceRange * 0.618 + multitool.low, scaleData)
+		}
+		else
+		{
+			levelY = Price_ToPixelY(priceRange * (1 - 0.618) + multitool.low, scaleData)
+		}
+
+		distY := levelY - posY
+		if distY * distY < targetSqrDistY { return .FIB_618 }
+	}
+
+	EDGE_THICKNESS :: 3
+
+	// Corners
+	if posX >= leftPos - EDGE_THICKNESS &&
+	   posX <= leftPos + EDGE_THICKNESS &&
+	   posY >= topPos - EDGE_THICKNESS &&
+	   posY <= topPos + EDGE_THICKNESS
+	{
+		return .EDGE_TOPLEFT
+	}
+
+	if posX >= rightPos - EDGE_THICKNESS &&
+	   posX <= rightPos + EDGE_THICKNESS &&
+	   posY >= topPos - EDGE_THICKNESS &&
+	   posY <= topPos + EDGE_THICKNESS
+	{
+		return .EDGE_TOPRIGHT
+	}
+
+	if posX >= leftPos - EDGE_THICKNESS &&
+	   posX <= leftPos + EDGE_THICKNESS &&
+	   posY >= bottomPos - EDGE_THICKNESS &&
+	   posY <= bottomPos + EDGE_THICKNESS
+	{
+		return .EDGE_BOTTOMLEFT
+	}
+
+	if posX >= rightPos - EDGE_THICKNESS &&
+	   posX <= rightPos + EDGE_THICKNESS &&
+	   posY >= bottomPos - EDGE_THICKNESS &&
+	   posY <= bottomPos + EDGE_THICKNESS
+	{
+		return .EDGE_BOTTOMRIGHT
+	}
+
+	// Edges
+	if posX >= leftPos - EDGE_THICKNESS &&
+	   posX <= rightPos + EDGE_THICKNESS &&
+	   posY >= topPos - EDGE_THICKNESS &&
+	   posY <= topPos + EDGE_THICKNESS
+	{
+		return .EDGE_TOP
+	}
+
+	if posX >= leftPos - EDGE_THICKNESS &&
+	   posX <= leftPos + EDGE_THICKNESS &&
+	   posY >= topPos - EDGE_THICKNESS &&
+	   posY <= bottomPos + EDGE_THICKNESS
+	{
+		return .EDGE_LEFT
+	}
+
+	if posX >= rightPos - EDGE_THICKNESS &&
+	   posX <= rightPos + EDGE_THICKNESS &&
+	   posY >= topPos - EDGE_THICKNESS &&
+	   posY <= bottomPos + EDGE_THICKNESS
+	{
+		return .EDGE_RIGHT
+	}
+
+	if posX >= leftPos - EDGE_THICKNESS &&
+	   posX <= rightPos + EDGE_THICKNESS &&
+	   posY >= bottomPos - EDGE_THICKNESS &&
+	   posY <= bottomPos + EDGE_THICKNESS
+	{
+		return .EDGE_BOTTOM
+	}
+
+	return .NONE
 }

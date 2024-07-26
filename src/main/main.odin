@@ -25,6 +25,9 @@ FONT_SIZE :: 14
 profilerData : ProfilerData
 font : raylib.Font
 
+volumeProfileIcon : raylib.Texture2D
+fibRetracementIcon : raylib.Texture2D
+
 main :: proc()
 {
 	using raylib
@@ -33,11 +36,9 @@ main :: proc()
 
 	SetTraceLogLevel(TraceLogLevel.WARNING)
 
-	InitWindow(INITIAL_SCREEN_WIDTH, INITIAL_SCREEN_HEIGHT, "Trading")
-	defer CloseWindow()
+	InitWindow(INITIAL_SCREEN_WIDTH, INITIAL_SCREEN_HEIGHT, "Trading"); defer CloseWindow()
 
-	icon := LoadImage("icon.png")
-	defer UnloadImage(icon)
+	icon := LoadImage("icon.png"); defer UnloadImage(icon)
 
 	SetWindowIcon(icon)
 
@@ -49,8 +50,10 @@ main :: proc()
 
     SetTargetFPS(60)
 
-	font = LoadFontEx("roboto-bold.ttf", FONT_SIZE, nil, 0)
-	defer UnloadFont(font)
+	font = LoadFontEx("roboto-bold.ttf", FONT_SIZE, nil, 0); defer UnloadFont(font)
+
+	volumeProfileIcon = LoadTexture("volumeProfileIcon.png"); defer UnloadTexture(volumeProfileIcon)
+	fibRetracementIcon = LoadTexture("fibRetracementIcon.png"); defer UnloadTexture(fibRetracementIcon)
 
 	candleTimeframeIncrements := CANDLE_TIMEFRAME_INCREMENTS
 
@@ -59,9 +62,8 @@ main :: proc()
 	chart.dateToDownload = LoadDateToDownload()
 
 	chart.candles[Timeframe.MINUTE].offset = BYBIT_ORIGIN_MINUTE_TIMESTAMP
-	chart.candles[Timeframe.MINUTE].candles = LoadMinuteCandles()
-	chart.candles[Timeframe.MINUTE].cumulativeDelta = LoadMinuteDelta()
-	defer delete(chart.candles[Timeframe.MINUTE].candles)
+	chart.candles[Timeframe.MINUTE].candles = LoadMinuteCandles(); defer delete(chart.candles[Timeframe.MINUTE].candles)
+	chart.candles[Timeframe.MINUTE].cumulativeDelta = LoadMinuteDelta(); defer delete(chart.candles[Timeframe.MINUTE].cumulativeDelta)
 
 	// Init chart.candles offsets and timeframes
 	{
@@ -325,32 +327,29 @@ main :: proc()
 
 		hoverCursors := [16]MouseCursor \
 		{
-			.DEFAULT,
-			.RESIZE_NWSE,
-			.RESIZE_NS,
-			.RESIZE_NESW,
-			.RESIZE_EW,
-			.RESIZE_EW,
-			.RESIZE_NESW,
-			.RESIZE_NS,
-			.RESIZE_NWSE,
-			.POINTING_HAND,
-			.POINTING_HAND,
-			.POINTING_HAND,
-			.POINTING_HAND,
-			.POINTING_HAND,
-			.POINTING_HAND,
-			.POINTING_HAND,
 		}
 
-		cursor := hoverCursors[hoveredHandle]
+		cursor : MouseCursor = ---
+		
+		#partial switch(hoveredHandle)
+		{
+			case .EDGE_TOPLEFT, .EDGE_BOTTOMRIGHT: cursor = .RESIZE_NWSE
+			case .EDGE_TOP, .EDGE_BOTTOM:          cursor = .RESIZE_NS
+			case .EDGE_TOPRIGHT, .EDGE_BOTTOMLEFT: cursor = .RESIZE_NESW
+			case .EDGE_LEFT, .EDGE_RIGHT:          cursor = .RESIZE_EW
+				
+			case .NONE: cursor = .DEFAULT
+			case: cursor = .POINTING_HAND
+		}
 
 		if hoveredMultitool != nil && !hasMouseMovedSelection
 		{
 			cursor = .POINTING_HAND
 		}
 
-		if IsMouseButtonPressed(.LEFT)
+		if IsMouseButtonPressed(.LEFT) &&
+		   hoveredHandle != .HOTBAR_VOLUME_PROFILE &&
+		   hoveredHandle != .HOTBAR_FIB_RETRACEMENT
 		{
 			hasMouseMovedSelection = false
 
@@ -455,6 +454,29 @@ main :: proc()
 					case .TV_VAL: selectedMultitool.volumeProfileDrawFlags ~= {.TV_VAL}
 					case .TV_VAH: selectedMultitool.volumeProfileDrawFlags ~= {.TV_VAH}
 					case .VWAP: selectedMultitool.volumeProfileDrawFlags ~= {.VWAP}
+					case .VOLUME_PROFILE_BODY: selectedMultitool.volumeProfileDrawFlags ~= {.BODY}
+					case .HOTBAR_VOLUME_PROFILE:
+					{
+						if IsKeyDown(.LEFT_SHIFT)
+						{
+							selectedMultitool.tools ~= {.VOLUME_PROFILE}
+						}
+						else
+						{
+							selectedMultitool.tools = {.VOLUME_PROFILE}
+						}
+					}
+					case .HOTBAR_FIB_RETRACEMENT:
+					{
+						if IsKeyDown(.LEFT_SHIFT)
+						{
+							selectedMultitool.tools ~= {.FIB_RETRACEMENT}
+						}
+						else
+						{
+							selectedMultitool.tools = {.FIB_RETRACEMENT}
+						}
+					}
 					case .NONE:
 					{
 						if selectedMultitool != nil &&
