@@ -74,8 +74,8 @@ Calculate :: proc(chart : Chart, multitool : ^Multitool, closeLevels : []CandleC
 	}
 
 	minuteCandles := chart.candles[Timeframe.MINUTE]
-	candleStartIndex := math.max(CandleList_TimestampToIndex(minuteCandles, multitool.startTimestamp), 0)
-	candleEndIndex := math.min(CandleList_TimestampToIndex(minuteCandles, multitool.endTimestamp), i32(len(minuteCandles.candles)) - 1)
+	candleStartIndex := CandleList_TimestampToIndex_Clamped(minuteCandles, multitool.startTimestamp)
+	candleEndIndex := CandleList_TimestampToIndex_Clamped(minuteCandles, multitool.endTimestamp)
 
 	candles := minuteCandles.candles[candleStartIndex:candleEndIndex]
 	

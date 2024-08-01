@@ -110,13 +110,11 @@ VolumeProfile_CreateBuckets :: proc(startTimestamp : i32, endTimestamp : i32, hi
     // (startTimestamp - 1) + 1 effectively makes the index round up instead of down
     // So a timestamp on an exact hour will match, but anything above that will point to the next hour
     startIndex := CandleList_TimestampToIndex(chart.candles[Timeframe.HOUR], startTimestamp - 1) + 1
-    startIndex = math.max(startIndex, 0)
-    startIndex = math.min(startIndex, i32(len(chart.candles[Timeframe.HOUR].candles) - 1))
+    startIndex = math.clamp(startIndex, 0, i32(len(chart.candles[Timeframe.HOUR].candles) - 1))
     startIndexTimestamp := CandleList_IndexToTimestamp(chart.candles[Timeframe.HOUR], startIndex)
 
     endIndex := CandleList_TimestampToIndex(chart.candles[Timeframe.HOUR], endTimestamp)
-    endIndex = math.max(endIndex, 0)
-    endIndex = math.min(endIndex, i32(len(chart.candles[Timeframe.HOUR].candles) - 1))
+    endIndex = math.clamp(endIndex, 0, i32(len(chart.candles[Timeframe.HOUR].candles) - 1))
     endIndexTimestamp := CandleList_IndexToTimestamp(chart.candles[Timeframe.HOUR], endIndex)
 
     tradesStartTimestamp := startTimestamp
@@ -545,6 +543,11 @@ VolumeProfile_Draw :: proc(profile : VolumeProfile, \
 
         bucketIndex := math.max(0,                    VolumeProfile_PixelYToBucket(profile, cameraPosY + GetScreenHeight(), scaleData))
         endIndex :=    math.min(len(profile.buckets), VolumeProfile_PixelYToBucket(profile, cameraPosY, scaleData) + 1)
+        
+        blueColor := VOLUME_PROFILE_BUY_COLOR
+        blueColor.a = alpha
+        orangeColor := VOLUME_PROFILE_SELL_COLOR
+        orangeColor.a = alpha
 
         for bucketIndex < endIndex
         {
@@ -570,11 +573,6 @@ VolumeProfile_Draw :: proc(profile : VolumeProfile, \
 
             buyPixels := i32(buyVolume / highestBucketVolume * f32(width))
             sellPixels := i32((totalVolume - buyVolume) / highestBucketVolume * f32(width))
-
-            blueColor := VOLUME_PROFILE_BUY_COLOR
-            blueColor.a = alpha
-            orangeColor := VOLUME_PROFILE_SELL_COLOR
-            orangeColor.a = alpha
 
             DrawRectangle(posX, bucketEndPixel, buyPixels, bucketThickness, blueColor)
             DrawRectangle(posX + buyPixels, bucketEndPixel, sellPixels, bucketThickness, orangeColor)

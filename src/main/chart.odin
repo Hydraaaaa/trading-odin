@@ -146,13 +146,14 @@ Chart_TimestampToTimeframe :: proc(chart : Chart, timestamp : i32) -> Timeframe
 
 Chart_GetRangeHighAndLow :: proc(chart : Chart, startTimestamp : i32, endTimestamp : i32) -> (f32, f32)
 {
-    // Determine the range's highest and lowest prices
-    candleTimeframe := math.min(Chart_TimestampToTimeframe(chart, startTimestamp), Chart_TimestampToTimeframe(chart, endTimestamp))
+    timeframe := math.min(Chart_TimestampToTimeframe(chart, startTimestamp), Chart_TimestampToTimeframe(chart, endTimestamp))
 
-    candlesStartIndex := math.max(CandleList_TimestampToIndex(chart.candles[candleTimeframe], startTimestamp), 0)
-    candlesEndIndex := math.min(CandleList_TimestampToIndex(chart.candles[candleTimeframe], endTimestamp), i32(len(chart.candles[candleTimeframe].candles)))
+    numCandles := i32(len(chart.candles[timeframe].candles))
 
-    capturedCandles := chart.candles[candleTimeframe].candles[candlesStartIndex:candlesEndIndex]
+    candlesStartIndex := math.clamp(CandleList_TimestampToIndex(chart.candles[timeframe], startTimestamp), 0, numCandles - 1)
+    candlesEndIndex := math.clamp(CandleList_TimestampToIndex(chart.candles[timeframe], endTimestamp), 1, numCandles)
+
+    capturedCandles := chart.candles[timeframe].candles[candlesStartIndex:candlesEndIndex]
 
     high := capturedCandles[0].high
     low := capturedCandles[0].low

@@ -8,6 +8,9 @@ import "vendor:raylib"
 LEVEL_CIRCLE_RADIUS :: 5
 FIB_618_COLOR :: raylib.Color{255, 255, 127, 255}
 
+LINE_SELECTION_THICKNESS :: 3
+
+CELL_COUNT :: 2
 HOTBAR_CELL_SIZE :: 32
 HOTBAR_SPACING :: 1
 HOTBAR_CELL_COUNT :: 2
@@ -36,6 +39,8 @@ Multitool :: struct
 
     volumeProfile : VolumeProfile,
     volumeProfileDrawFlags : VolumeProfile_DrawFlagSet,
+
+    draw618 : bool,
 
 	strategyResults : [dynamic]Result,
 }
@@ -73,80 +78,142 @@ Multitool_IsOverlapping :: proc{Multitool_IsOverlappingPoint, Multitool_IsOverla
 // Precise, used for cursor
 Multitool_IsOverlappingPoint :: proc(multitool : Multitool, posX : i32, posY : i32, scaleData : ScaleData) -> bool
 {
-	if !Multitool_IsOverlappingRect(multitool, posX, posY, 0, 0, scaleData)
+	if !Multitool_IsOverlappingRect(multitool, posX, posY, 1, 1, scaleData)
 	{
 		return false
 	}
-
+	
 	multitoolStartPosX := Timestamp_ToPixelX(multitool.startTimestamp, scaleData)
 	multitoolEndPosX := Timestamp_ToPixelX(multitool.endTimestamp, scaleData)
 
-	// If hovering the right side of the profile, compare against value area lines etc
-	if posX > multitoolEndPosX
+	if .FIB_RETRACEMENT in multitool.tools &&
+	   multitool.draw618
 	{
-		bucketIndices := []int{multitool.volumeProfile.pocIndex, multitool.volumeProfile.vahIndex, multitool.volumeProfile.valIndex, multitool.volumeProfile.tvVahIndex, multitool.volumeProfile.tvValIndex }
+		priceRange := multitool.high - multitool.low
 
-		for index in bucketIndices
+		pixelY : i32 = ---
+		
+		if multitool.isUpsideDown
 		{
-			bucketStartPixel := VolumeProfile_BucketToPixelY(multitool.volumeProfile, index, scaleData)
-			bucketEndPixel := VolumeProfile_BucketToPixelY(multitool.volumeProfile, index + 1, scaleData)
+			pixelY = Price_ToPixelY(priceRange * 0.618 + multitool.low, scaleData)
+		}
+		else
+		{
+			pixelY = Price_ToPixelY(priceRange * (1 - 0.618) + multitool.low, scaleData)
+		}
+		
+		if posX >= multitoolEndPosX &&
+		   posY >= pixelY - LINE_SELECTION_THICKNESS &&
+		   posY < pixelY + LINE_SELECTION_THICKNESS
+		{
+			fmt.println("Overlap 618")
+			return true
+		}
+	}
 
-			bucketThickness := math.max(bucketStartPixel - bucketEndPixel, 1)
+	if .VOLUME_PROFILE in multitool.tools
+	{
+		// If hovering the right side of the profile, compare against value area lines etc
+		if posX > multitoolEndPosX
+		{
+			bucketIndices := []int{multitool.volumeProfile.pocIndex, multitool.volumeProfile.vahIndex, multitool.volumeProfile.valIndex, multitool.volumeProfile.tvVahIndex, multitool.volumeProfile.tvValIndex }
+			drawFlags := []VolumeProfile_DrawFlag{.POC, .VAH, .VAL, .TV_VAH, .TV_VAL}
 
-			if posY >= bucketEndPixel && posY < bucketEndPixel + bucketThickness ||
-			   bucketThickness == 1 && math.abs(posY - bucketStartPixel) < 3
+			for bucketIndex, index in bucketIndices
 			{
-				return true
+				if drawFlags[index] not_in multitool.volumeProfileDrawFlags
+				{
+					continue
+				}
+			
+				bucketStartPixel := VolumeProfile_BucketToPixelY(multitool.volumeProfile, bucketIndex, scaleData, true)
+				bucketEndPixel := VolumeProfile_BucketToPixelY(multitool.volumeProfile, bucketIndex + 1, scaleData, true)
+
+				bucketThickness := math.max(bucketStartPixel - bucketEndPixel, 1)
+
+				if posY >= bucketEndPixel && posY < bucketEndPixel + bucketThickness ||
+				   bucketThickness == 1 && math.abs(posY - bucketStartPixel) < LINE_SELECTION_THICKNESS
+				{
+					return true
+				}
 			}
+
+			// Check overlap with VWAP
+			return .VWAP in multitool.volumeProfileDrawFlags &&
+			       math.abs(posY - Price_ToPixelY(multitool.volumeProfile.vwap, scaleData)) < LINE_SELECTION_THICKNESS
 		}
 
-		// Check overlap with VWAP
-		return math.abs(posY - Price_ToPixelY(multitool.volumeProfile.vwap, scaleData)) < 3
+		// Compare against the profile itself
+		if .BODY not_in multitool.volumeProfileDrawFlags ||
+		   !Multitool_IsVolumeProfileBodyOverlappingRect(multitool, posX, posY, 1, 1, scaleData)
+		{
+			return false
+		}
+	
+		width := Timestamp_ToPixelX(multitool.endTimestamp, scaleData) - Timestamp_ToPixelX(multitool.startTimestamp, scaleData)
+
+		bucketIndex := VolumeProfile_PixelYToBucket(multitool.volumeProfile, posY, scaleData)
+
+		volume := multitool.volumeProfile.buckets[bucketIndex].buyVolume + multitool.volumeProfile.buckets[bucketIndex].sellVolume
+
+		startBucketPixel := posY
+		currentBucketPixel := VolumeProfile_BucketToPixelY(multitool.volumeProfile, bucketIndex + 1, scaleData)
+
+		// If there are multiple buckets within one pixel, only draw the biggest
+		for currentBucketPixel == startBucketPixel &&
+			bucketIndex < len(multitool.volumeProfile.buckets) - 1
+		{
+			bucketIndex += 1
+
+			volume = math.max(volume, multitool.volumeProfile.buckets[bucketIndex].buyVolume + multitool.volumeProfile.buckets[bucketIndex].sellVolume)
+
+			currentBucketPixel = VolumeProfile_BucketToPixelY(multitool.volumeProfile, bucketIndex + 1, scaleData)
+		}
+
+		highestBucketVolume := multitool.volumeProfile.buckets[multitool.volumeProfile.pocIndex].buyVolume + multitool.volumeProfile.buckets[multitool.volumeProfile.pocIndex].sellVolume
+
+		return posX <= multitoolStartPosX + i32(f32(width) * (volume / highestBucketVolume))
 	}
 
-	// Compare against the profile itself
-
-	width := Timestamp_ToPixelX(multitool.endTimestamp, scaleData) - Timestamp_ToPixelX(multitool.startTimestamp, scaleData)
-
-	bucketIndex := VolumeProfile_PixelYToBucket(multitool.volumeProfile, posY, scaleData)
-
-	volume := multitool.volumeProfile.buckets[bucketIndex].buyVolume + multitool.volumeProfile.buckets[bucketIndex].sellVolume
-
-	startBucketPixel := posY
-	currentBucketPixel := VolumeProfile_BucketToPixelY(multitool.volumeProfile, bucketIndex + 1, scaleData)
-
-	// If there are multiple buckets within one pixel, only draw the biggest
-	for currentBucketPixel == startBucketPixel &&
-		bucketIndex < len(multitool.volumeProfile.buckets) - 1
-	{
-		bucketIndex += 1
-
-		volume = math.max(volume, multitool.volumeProfile.buckets[bucketIndex].buyVolume + multitool.volumeProfile.buckets[bucketIndex].sellVolume)
-
-		currentBucketPixel = VolumeProfile_BucketToPixelY(multitool.volumeProfile, bucketIndex + 1, scaleData)
-	}
-
-	highestBucketVolume := multitool.volumeProfile.buckets[multitool.volumeProfile.pocIndex].buyVolume + multitool.volumeProfile.buckets[multitool.volumeProfile.pocIndex].sellVolume
-
-	return posX <= multitoolStartPosX + i32(f32(width) * (volume / highestBucketVolume))
+	return false
 }
 
 // Approximate, used for culling
 Multitool_IsOverlappingRect :: proc(multitool : Multitool, posX : i32, posY : i32, width : i32, height : i32, scaleData : ScaleData) -> bool
 {
-	startTimestamp := Timestamp_FromPixelX(posX, scaleData)
-	endTimestamp := Timestamp_FromPixelX(posX + width, scaleData)
+	start := Timestamp_FromPixelX(posX, scaleData)
+	end := Timestamp_FromPixelX(posX + width, scaleData)
 	high := Price_FromPixelY(posY, scaleData)
 	low := Price_FromPixelY(posY + height, scaleData)
 
+	multitoolStart := multitool.startTimestamp
+	multitoolEnd := multitool.endTimestamp + (multitool.endTimestamp - multitool.startTimestamp)
+	multitoolHigh := math.max(multitool.high, multitool.volumeProfile.bottomPrice + f32(len(multitool.volumeProfile.buckets)) * multitool.volumeProfile.bucketSize)
+	multitoolLow := math.min(multitool.low, multitool.volumeProfile.bottomPrice)
+
+	return !(multitoolHigh < low ||
+	         multitoolLow > high ||
+	         multitoolStart > end ||
+	         multitoolEnd < start)
+}
+
+// Approximate, used for culling  
+Multitool_IsVolumeProfileBodyOverlappingRect :: proc(multitool : Multitool, posX : i32, posY : i32, width : i32, height : i32, scaleData : ScaleData) -> bool
+{
+	start := Timestamp_FromPixelX(posX, scaleData)
+	end := Timestamp_FromPixelX(posX + width, scaleData)
+	high := Price_FromPixelY(posY, scaleData)
+	low := Price_FromPixelY(posY + height, scaleData)
+
+	profileStart := multitool.startTimestamp
+	profileEnd := multitool.endTimestamp
 	profileHigh := multitool.volumeProfile.bottomPrice + f32(len(multitool.volumeProfile.buckets)) * multitool.volumeProfile.bucketSize
 	profileLow := multitool.volumeProfile.bottomPrice
 
-	// TODO: Depends on if VolumeProfile is active
-	return profileHigh >= low &&
-	       profileLow <= high &&
-	       multitool.startTimestamp <= endTimestamp &&
-	       multitool.endTimestamp + (multitool.endTimestamp - multitool.startTimestamp) >= startTimestamp
+	return !(profileHigh < low ||
+	         profileLow > high ||
+	         profileStart > end ||
+	         profileEnd < start)
 }
 
 Multitool_Draw :: proc(multitool : Multitool, cameraPosX : i32, cameraPosY : i32, scaleData : ScaleData)
@@ -203,12 +270,13 @@ Multitool_Draw :: proc(multitool : Multitool, cameraPosX : i32, cameraPosY : i32
 		VolumeProfile_Draw(multitool.volumeProfile, startX + width, width, cameraPosY, scaleData, 191, multitool.volumeProfileDrawFlags - {.BODY})
 	}
 
-	if .FIB_RETRACEMENT in multitool.tools
+	if .FIB_RETRACEMENT in multitool.tools &&
+	   multitool.draw618
 	{
 		priceRange := multitool.high - multitool.low
 
-		fibStartX := startX + width - cameraPosX
-		fibEndX := startX + width + width - cameraPosX
+		fibStartX := startX + width
+		fibEndX := startX + width + width
 
 		pixelY : i32 = ---
 
@@ -342,7 +410,7 @@ Multitool_DrawHandles :: proc(multitool : Multitool, cameraPosX : i32, cameraPos
 			pixelY = Price_ToPixelY(priceRange * (1 - 0.618) + multitool.low, scaleData) - cameraPosY
 		}
 
-		DrawCircle(posX + width - cameraPosX, pixelY, LEVEL_CIRCLE_RADIUS, {255, 255, 127, 255})
+		DrawCircle(posX + width - cameraPosX, pixelY, LEVEL_CIRCLE_RADIUS, FIB_618_COLOR)
 	}
 
 	// Hotbar
@@ -389,10 +457,10 @@ Multitool_HandleAt :: proc(multitool : Multitool, posX : i32, posY : i32, scaleD
 	hotbarX := leftPos + width / 2 - HOTBAR_WIDTH / 2
 	hotbarY := topPos + height - HOTBAR_HEIGHT - 8
 
-	if posX >= leftPos &&
-	   posX < rightPos &&
-	   posY >= topPos &&
-	   posY < bottomPos
+	if posX >= hotbarX &&
+	   posX < hotbarX + HOTBAR_WIDTH &&
+	   posY >= hotbarY &&
+	   posY < hotbarY + HOTBAR_HEIGHT
 	{
 		cellX := hotbarX + HOTBAR_SPACING
 		cellY := hotbarY + HOTBAR_SPACING
@@ -421,6 +489,25 @@ Multitool_HandleAt :: proc(multitool : Multitool, posX : i32, posY : i32, scaleD
 	// Circle overlap helper values
 	distX := rightPos - posX
 	targetSqrDistY := SQR_RADIUS - distX * distX
+	
+	if .FIB_RETRACEMENT in multitool.tools
+	{
+		levelY : i32 = ---
+
+		priceRange := multitool.high - multitool.low
+
+		if multitool.isUpsideDown
+		{
+			levelY = Price_ToPixelY(priceRange * 0.618 + multitool.low, scaleData)
+		}
+		else
+		{
+			levelY = Price_ToPixelY(priceRange * (1 - 0.618) + multitool.low, scaleData)
+		}
+
+		distY := levelY - posY
+		if distY * distY < targetSqrDistY { return .FIB_618 }
+	}
 
 	if .VOLUME_PROFILE in multitool.tools
 	{
@@ -456,92 +543,70 @@ Multitool_HandleAt :: proc(multitool : Multitool, posX : i32, posY : i32, scaleD
 		levelY = Price_ToPixelY(VolumeProfile_BucketToPrice(multitool.volumeProfile, multitool.volumeProfile.pocIndex), scaleData)
 		distY = levelY - posY
 		if distY * distY < targetSqrDistY { return .VOLUME_PROFILE_BODY }
-
 	}
-
-	if .FIB_RETRACEMENT in multitool.tools
-	{
-		levelY : i32 = ---
-
-		priceRange := multitool.high - multitool.low
-
-		if multitool.isUpsideDown
-		{
-			levelY = Price_ToPixelY(priceRange * 0.618 + multitool.low, scaleData)
-		}
-		else
-		{
-			levelY = Price_ToPixelY(priceRange * (1 - 0.618) + multitool.low, scaleData)
-		}
-
-		distY := levelY - posY
-		if distY * distY < targetSqrDistY { return .FIB_618 }
-	}
-
-	EDGE_THICKNESS :: 3
 
 	// Corners
-	if posX >= leftPos - EDGE_THICKNESS &&
-	   posX <= leftPos + EDGE_THICKNESS &&
-	   posY >= topPos - EDGE_THICKNESS &&
-	   posY <= topPos + EDGE_THICKNESS
+	if posX >= leftPos - LINE_SELECTION_THICKNESS &&
+	   posX <= leftPos + LINE_SELECTION_THICKNESS &&
+	   posY >= topPos - LINE_SELECTION_THICKNESS &&
+	   posY <= topPos + LINE_SELECTION_THICKNESS
 	{
 		return .EDGE_TOPLEFT
 	}
 
-	if posX >= rightPos - EDGE_THICKNESS &&
-	   posX <= rightPos + EDGE_THICKNESS &&
-	   posY >= topPos - EDGE_THICKNESS &&
-	   posY <= topPos + EDGE_THICKNESS
+	if posX >= rightPos - LINE_SELECTION_THICKNESS &&
+	   posX <= rightPos + LINE_SELECTION_THICKNESS &&
+	   posY >= topPos - LINE_SELECTION_THICKNESS &&
+	   posY <= topPos + LINE_SELECTION_THICKNESS
 	{
 		return .EDGE_TOPRIGHT
 	}
 
-	if posX >= leftPos - EDGE_THICKNESS &&
-	   posX <= leftPos + EDGE_THICKNESS &&
-	   posY >= bottomPos - EDGE_THICKNESS &&
-	   posY <= bottomPos + EDGE_THICKNESS
+	if posX >= leftPos - LINE_SELECTION_THICKNESS &&
+	   posX <= leftPos + LINE_SELECTION_THICKNESS &&
+	   posY >= bottomPos - LINE_SELECTION_THICKNESS &&
+	   posY <= bottomPos + LINE_SELECTION_THICKNESS
 	{
 		return .EDGE_BOTTOMLEFT
 	}
 
-	if posX >= rightPos - EDGE_THICKNESS &&
-	   posX <= rightPos + EDGE_THICKNESS &&
-	   posY >= bottomPos - EDGE_THICKNESS &&
-	   posY <= bottomPos + EDGE_THICKNESS
+	if posX >= rightPos - LINE_SELECTION_THICKNESS &&
+	   posX <= rightPos + LINE_SELECTION_THICKNESS &&
+	   posY >= bottomPos - LINE_SELECTION_THICKNESS &&
+	   posY <= bottomPos + LINE_SELECTION_THICKNESS
 	{
 		return .EDGE_BOTTOMRIGHT
 	}
 
 	// Edges
-	if posX >= leftPos - EDGE_THICKNESS &&
-	   posX <= rightPos + EDGE_THICKNESS &&
-	   posY >= topPos - EDGE_THICKNESS &&
-	   posY <= topPos + EDGE_THICKNESS
+	if posX >= leftPos - LINE_SELECTION_THICKNESS &&
+	   posX <= rightPos + LINE_SELECTION_THICKNESS &&
+	   posY >= topPos - LINE_SELECTION_THICKNESS &&
+	   posY <= topPos + LINE_SELECTION_THICKNESS
 	{
 		return .EDGE_TOP
 	}
 
-	if posX >= leftPos - EDGE_THICKNESS &&
-	   posX <= leftPos + EDGE_THICKNESS &&
-	   posY >= topPos - EDGE_THICKNESS &&
-	   posY <= bottomPos + EDGE_THICKNESS
+	if posX >= leftPos - LINE_SELECTION_THICKNESS &&
+	   posX <= leftPos + LINE_SELECTION_THICKNESS &&
+	   posY >= topPos - LINE_SELECTION_THICKNESS &&
+	   posY <= bottomPos + LINE_SELECTION_THICKNESS
 	{
 		return .EDGE_LEFT
 	}
 
-	if posX >= rightPos - EDGE_THICKNESS &&
-	   posX <= rightPos + EDGE_THICKNESS &&
-	   posY >= topPos - EDGE_THICKNESS &&
-	   posY <= bottomPos + EDGE_THICKNESS
+	if posX >= rightPos - LINE_SELECTION_THICKNESS &&
+	   posX <= rightPos + LINE_SELECTION_THICKNESS &&
+	   posY >= topPos - LINE_SELECTION_THICKNESS &&
+	   posY <= bottomPos + LINE_SELECTION_THICKNESS
 	{
 		return .EDGE_RIGHT
 	}
 
-	if posX >= leftPos - EDGE_THICKNESS &&
-	   posX <= rightPos + EDGE_THICKNESS &&
-	   posY >= bottomPos - EDGE_THICKNESS &&
-	   posY <= bottomPos + EDGE_THICKNESS
+	if posX >= leftPos - LINE_SELECTION_THICKNESS &&
+	   posX <= rightPos + LINE_SELECTION_THICKNESS &&
+	   posY >= bottomPos - LINE_SELECTION_THICKNESS &&
+	   posY <= bottomPos + LINE_SELECTION_THICKNESS
 	{
 		return .EDGE_BOTTOM
 	}

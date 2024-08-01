@@ -23,7 +23,9 @@ VERTICAL_LABEL_PADDING :: HORIZONTAL_LABEL_PADDING - 2
 FONT_SIZE :: 14
 
 profilerData : ProfilerData
+
 font : raylib.Font
+labelHeight : i32
 
 volumeProfileIcon : raylib.Texture2D
 fibRetracementIcon : raylib.Texture2D
@@ -51,11 +53,10 @@ main :: proc()
     SetTargetFPS(60)
 
 	font = LoadFontEx("roboto-bold.ttf", FONT_SIZE, nil, 0); defer UnloadFont(font)
+	labelHeight = i32(MeasureTextEx(font, "W\x00", FONT_SIZE, 0).y + VERTICAL_LABEL_PADDING * 2)
 
 	volumeProfileIcon = LoadTexture("volumeProfileIcon.png"); defer UnloadTexture(volumeProfileIcon)
 	fibRetracementIcon = LoadTexture("fibRetracementIcon.png"); defer UnloadTexture(fibRetracementIcon)
-
-	candleTimeframeIncrements := CANDLE_TIMEFRAME_INCREMENTS
 
 	chart : Chart
 
@@ -294,9 +295,7 @@ main :: proc()
 			// We add one pixel to the cursor's position, as all of the candles' timestamps get rounded down when converted
 			// As we are doing the opposite conversion, the mouse will always be less than or equal to the candles
 			cursorTimestamp = Timestamp_FromPixelX(GetMouseX() + cameraPosX + 1, scaleData)
-			cursorCandleIndex = CandleList_TimestampToIndex(chart.candles[zoomIndex], cursorTimestamp)
-			cursorCandleIndex = math.min(cursorCandleIndex, i32(len(visibleCandles)) - 1 + visibleCandlesStartIndex)
-			cursorCandleIndex = math.max(cursorCandleIndex, 0)
+			cursorCandleIndex = CandleList_TimestampToIndex_Clamped(chart.candles[zoomIndex], cursorTimestamp)
 			cursorCandle = chart.candles[zoomIndex].candles[cursorCandleIndex]
 		}
 
@@ -430,7 +429,7 @@ main :: proc()
 				selectedMultitoolIndex = len(multitools) - 1
 
 				selectedMultitool.startTimestamp = mouseSelectionStartTimestamp
-				selectedMultitool.endTimestamp = mouseSelectionStartTimestamp + candleTimeframeIncrements[zoomIndex]
+				selectedMultitool.endTimestamp = mouseSelectionStartTimestamp + CandleList_IndexToDuration(chart.candles[zoomIndex], cursorCandleIndex)
 				selectedMultitool.high = cursorSnapPrice
 				selectedMultitool.low = cursorSnapPrice
 				selectedMultitool.isUpsideDown = false
@@ -439,6 +438,8 @@ main :: proc()
 				
 				selectedMultitool.volumeProfile = VolumeProfile_Create(selectedMultitool.startTimestamp, selectedMultitool.endTimestamp, chart, 25)
 				selectedMultitool.volumeProfileDrawFlags = {.BODY, .POC, .VAL, .VAH, .TV_VAL, .TV_VAH, .VWAP}
+				
+				selectedMultitool.draw618 = true
 			}
 		}
 
@@ -455,6 +456,7 @@ main :: proc()
 					case .TV_VAH: selectedMultitool.volumeProfileDrawFlags ~= {.TV_VAH}
 					case .VWAP: selectedMultitool.volumeProfileDrawFlags ~= {.VWAP}
 					case .VOLUME_PROFILE_BODY: selectedMultitool.volumeProfileDrawFlags ~= {.BODY}
+					case .FIB_618: selectedMultitool.draw618 = !selectedMultitool.draw618
 					case .HOTBAR_VOLUME_PROFILE:
 					{
 						if IsKeyDown(.LEFT_SHIFT)
@@ -523,19 +525,19 @@ main :: proc()
 					{
 						#partial switch selectedHandle
 						{
-							case .EDGE_TOPLEFT: selectedHandle = .EDGE_TOPRIGHT; mouseSelectionStartTimestamp -= candleTimeframeIncrements[zoomIndex]
-							case .EDGE_BOTTOMLEFT: selectedHandle = .EDGE_BOTTOMRIGHT; mouseSelectionStartTimestamp -= candleTimeframeIncrements[zoomIndex];
+							case .EDGE_TOPLEFT: selectedHandle = .EDGE_TOPRIGHT; mouseSelectionStartTimestamp -= CandleList_IndexToDuration(chart.candles[zoomIndex], cursorCandleIndex)
+							case .EDGE_BOTTOMLEFT: selectedHandle = .EDGE_BOTTOMRIGHT; mouseSelectionStartTimestamp -= CandleList_IndexToDuration(chart.candles[zoomIndex], cursorCandleIndex);
 						}
 						
 						newStartTimestamp = mouseSelectionStartTimestamp
-						newEndTimestamp = cursorCandleTimestamp + candleTimeframeIncrements[zoomIndex]
+						newEndTimestamp = cursorCandleTimestamp + CandleList_IndexToDuration(chart.candles[zoomIndex], cursorCandleIndex)
 					}
 					else
 					{
 						#partial switch selectedHandle
 						{
-							case .EDGE_TOPRIGHT: selectedHandle = .EDGE_TOPLEFT; mouseSelectionStartTimestamp += candleTimeframeIncrements[zoomIndex]
-							case .EDGE_BOTTOMRIGHT: selectedHandle = .EDGE_BOTTOMLEFT; mouseSelectionStartTimestamp += candleTimeframeIncrements[zoomIndex]
+							case .EDGE_TOPRIGHT: selectedHandle = .EDGE_TOPLEFT; mouseSelectionStartTimestamp += CandleList_IndexToDuration(chart.candles[zoomIndex], cursorCandleIndex)
+							case .EDGE_BOTTOMRIGHT: selectedHandle = .EDGE_BOTTOMLEFT; mouseSelectionStartTimestamp += CandleList_IndexToDuration(chart.candles[zoomIndex], cursorCandleIndex)
 						}
 						
 						newStartTimestamp = cursorCandleTimestamp
@@ -575,18 +577,18 @@ main :: proc()
 						if selectedHandle == .EDGE_LEFT
 						{
 							selectedHandle = .EDGE_RIGHT
-							mouseSelectionStartTimestamp -= candleTimeframeIncrements[zoomIndex]
+							mouseSelectionStartTimestamp -= CandleList_IndexToDuration(chart.candles[zoomIndex], cursorCandleIndex)
 						}
 						
 						newStartTimestamp = mouseSelectionStartTimestamp
-						newEndTimestamp = cursorCandleTimestamp + candleTimeframeIncrements[zoomIndex]
+						newEndTimestamp = cursorCandleTimestamp + CandleList_IndexToDuration(chart.candles[zoomIndex], cursorCandleIndex)
 					}
 					else
 					{
 						if selectedHandle == .EDGE_RIGHT
 						{
 							selectedHandle = .EDGE_LEFT
-							mouseSelectionStartTimestamp += candleTimeframeIncrements[zoomIndex]
+							mouseSelectionStartTimestamp += CandleList_IndexToDuration(chart.candles[zoomIndex], cursorCandleIndex)
 						}
 						
 						newStartTimestamp = cursorCandleTimestamp
@@ -865,8 +867,6 @@ main :: proc()
 		// These are the only four linear scale increments, once these are exhausted, the values are multiplied by 10 and recycled
 		priceLabels : [dynamic]PriceLabel
 		reserve(&priceLabels, 32)
-
-		labelHeight := i32(MeasureTextEx(font, "W\x00", FONT_SIZE, 0).y + VERTICAL_LABEL_PADDING * 2)
 
 		priceLabelSpacing : i32 = labelHeight + 6
 
@@ -1376,10 +1376,10 @@ main :: proc()
 			candleWidth := CandleList_IndexToWidth(chart.candles[zoomIndex], i32(i) + visibleCandlesStartIndex, scaleData)
 
 			bodyPosY := Price_ToPixelY(math.max(candle.open, candle.close), scaleData)
-			bodyHeight:= math.max(Price_ToPixelY(math.min(candle.open, candle.close), scaleData) - bodyPosY, 1)
+			bodyHeight := math.max(Price_ToPixelY(math.min(candle.open, candle.close), scaleData) - bodyPosY, 1)
 
 			wickPosY := Price_ToPixelY(candle.high, scaleData)
-			wickHeight:= Price_ToPixelY(candle.low, scaleData) - wickPosY
+			wickHeight := Price_ToPixelY(candle.low, scaleData) - wickPosY
 
 			DrawRectangle(xPos, bodyPosY - cameraPosY, candleWidth, bodyHeight, candleColors[int(candle.close <= candle.open)]) // Body
 			DrawRectangle(xPos + i32(f32(candleWidth) / 2 - 0.5), wickPosY - cameraPosY, 1, wickHeight, candleColors[int(candle.close <= candle.open)]) // Wick
@@ -1420,6 +1420,13 @@ main :: proc()
 			startIndex := CandleList_TimestampToIndex(chart.candles[Timeframe.DAY], CandleList_IndexToTimestamp(chart.candles[zoomIndex], visibleCandlesStartIndex)) - 1
 			endIndex := CandleList_TimestampToIndex(chart.candles[Timeframe.DAY], CandleList_IndexToTimestamp(chart.candles[zoomIndex], visibleCandlesStartIndex + i32(len(visibleCandles))))
 
+			// If no candles are on screen, just draw the last profile
+			if len(visibleCandles) == 0
+			{
+				endIndex = i32(len(chart.candles[Timeframe.DAY].candles))
+				startIndex = endIndex - 1
+			}
+
 			for i in startIndex ..< endIndex
 			{
 				startTimestamp := CandleList_IndexToTimestamp(chart.candles[Timeframe.DAY], i32(i))
@@ -1442,7 +1449,8 @@ main :: proc()
 		}
 
 		// Draw CVD
-		if drawCVD
+		if drawCVD &&
+		   len(visibleCandles) > 0
 		{
 			highestCloseCandle, _ := Candle_HighestClose(visibleCandles)
 			lowestCloseCandle, _ := Candle_LowestClose(visibleCandles)
@@ -1452,38 +1460,44 @@ main :: proc()
 
 			visibleDeltas := chart.candles[zoomIndex].cumulativeDelta[visibleCandlesStartIndex:visibleCandlesStartIndex + i32(len(visibleCandles))]
 
-			highestPixel := Price_ToPixelY_f32(highestClose, scaleData) - f32(cameraPosY)
-			lowestPixel := Price_ToPixelY_f32(lowestClose, scaleData) - f32(cameraPosY)
-			pixelRange := highestPixel - lowestPixel
-
-			highestDelta := visibleDeltas[0]
-			lowestDelta := visibleDeltas[0]
-
-			for delta in visibleDeltas[1:]
+			if len(visibleDeltas) > 0
 			{
-				highestDelta = math.max(highestDelta, delta)
-				lowestDelta = math.min(lowestDelta, delta)
+				highestPixel := Price_ToPixelY_f32(highestClose, scaleData) - f32(cameraPosY)
+				lowestPixel := Price_ToPixelY_f32(lowestClose, scaleData) - f32(cameraPosY)
+				pixelRange := highestPixel - lowestPixel
+
+				highestDelta := visibleDeltas[0]
+				lowestDelta := visibleDeltas[0]
+
+				for delta in visibleDeltas[1:]
+				{
+					highestDelta = math.max(highestDelta, delta)
+					lowestDelta = math.min(lowestDelta, delta)
+				}
+
+				deltaRange := highestDelta - lowestDelta
+
+				highestCandleY := Price_ToPixelY(highestClose, scaleData) - cameraPosY
+				lowestCandleY := Price_ToPixelY(lowestClose, scaleData) - cameraPosY
+
+				points : [1000]Vector2 = ---
+
+				for delta, i in visibleDeltas
+				{
+					points[i].x = f32(CandleList_IndexToPixelX(chart.candles[zoomIndex], visibleCandlesStartIndex + i32(i) + 1, scaleData) - cameraPosX)
+					points[i].y = f32((delta - lowestDelta) / deltaRange) * pixelRange + lowestPixel
+				}
+
+				DrawLineStrip(raw_data(points[:]), i32(len(visibleDeltas)), Color{255, 255, 255, 191})
 			}
-
-			deltaRange := highestDelta - lowestDelta
-
-			highestCandleY := Price_ToPixelY(highestClose, scaleData) - cameraPosY
-			lowestCandleY := Price_ToPixelY(lowestClose, scaleData) - cameraPosY
-
-			points : [1000]Vector2 = ---
-
-			for delta, i in visibleDeltas
-			{
-				points[i].x = f32(CandleList_IndexToPixelX(chart.candles[zoomIndex], visibleCandlesStartIndex + i32(i) + 1, scaleData) - cameraPosX)
-				points[i].y = f32((delta - lowestDelta) / deltaRange) * pixelRange + lowestPixel
-			}
-
-			DrawLineStrip(raw_data(points[:]), i32(len(visibleDeltas)), Color{255, 255, 255, 191})
 		}
 
 		for multitool in multitools
 		{
-			Multitool_Draw(multitool, cameraPosX, cameraPosY, scaleData)
+			if Multitool_IsOverlapping(multitool, cameraPosX, cameraPosY, screenWidth, screenHeight, scaleData)
+			{
+				Multitool_Draw(multitool, cameraPosX, cameraPosY, scaleData)
+			}
 		}
 
 		if hoveredMultitool != nil

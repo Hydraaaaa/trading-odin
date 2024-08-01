@@ -28,6 +28,7 @@ Timeframe :: enum
 	//YEAR,
 }
 
+// May return out of range index, consider CandleList_TimestampToIndex_Clamped
 CandleList_TimestampToIndex :: proc(candleList : CandleList, timestamp : i32) -> i32
 {
 	timeframeIncrements := CANDLE_TIMEFRAME_INCREMENTS
@@ -69,6 +70,12 @@ CandleList_TimestampToIndex :: proc(candleList : CandleList, timestamp : i32) ->
 	index := (timestamp - candleList.offset) / increment
 
 	return index
+}
+
+// Ensures that the returned index is not out of range
+CandleList_TimestampToIndex_Clamped :: proc(candleList : CandleList, timestamp : i32) -> i32
+{
+	return math.clamp(CandleList_TimestampToIndex(candleList, timestamp), 0, i32(len(candleList.candles)) - 1)
 }
 
 CandleList_IndexToTimestamp :: proc(candleList : CandleList, index : i32) -> i32
@@ -135,13 +142,13 @@ CandleList_IndexToWidth :: proc(candleList : CandleList, index : i32, scaleData 
 	return Timestamp_ToPixelX(CandleList_IndexToDuration(candleList, index), scaleData)
 }
 
-// Returned i32 is the slice's index within the candleList
+// Returned i32 is the slice's index within the candleList, -1 if slice is empty
 CandleList_CandlesBetweenTimestamps :: proc(candleList : CandleList, startTimestamp : i32, endTimestamp : i32) -> ([]Candle, i32)
 {
 	if candleList.offset > endTimestamp
 	{
 		// End is further left than the leftmost candle
-		return nil, 0
+		return nil, -1
 	}
 
     startTimestamp := startTimestamp - candleList.offset
@@ -172,7 +179,7 @@ CandleList_CandlesBetweenTimestamps :: proc(candleList : CandleList, startTimest
 		if candleListLen <= cameraCandleIndex
 		{
 			// Start is further right than the rightmost candle
-			return nil, 0
+			return nil, -1
 		}
 
 		cameraEndCandleIndex := endTimestamp / FOUR_YEARS * 48
@@ -199,7 +206,7 @@ CandleList_CandlesBetweenTimestamps :: proc(candleList : CandleList, startTimest
 	if candleListLen * increment < startTimestamp
 	{
 		// Start is further right than the rightmost candle
-		return nil, 0
+		return nil, -1
 	}
 
 	startIndex := math.clamp(startTimestamp / increment, 0, lastCandleIndex)
