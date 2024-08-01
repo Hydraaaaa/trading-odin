@@ -105,7 +105,7 @@ CandleList_IndexToTimestamp :: proc(candleList : CandleList, index : i32) -> i32
 	return timeframeIncrements[candleList.timeframe] * index + candleList.offset
 }
 
-CandleList_IndexToPixelX :: proc(candleList : CandleList, index : i32, scaleData : ScaleData) -> i32
+CandleList_IndexToPixelX :: proc(candleList : CandleList, index : i32, scaleData : ScaleData) -> f32
 {
 	return Timestamp_ToPixelX(CandleList_IndexToTimestamp(candleList, index), scaleData)
 }
@@ -137,7 +137,7 @@ CandleList_IndexToDuration :: proc(candleList : CandleList, index : i32) -> i32
 	return timeframeIncrements[candleList.timeframe]
 }
 
-CandleList_IndexToWidth :: proc(candleList : CandleList, index : i32, scaleData : ScaleData) -> i32
+CandleList_IndexToWidth :: proc(candleList : CandleList, index : i32, scaleData : ScaleData) -> f32
 {
 	return Timestamp_ToPixelX(CandleList_IndexToDuration(candleList, index), scaleData)
 }

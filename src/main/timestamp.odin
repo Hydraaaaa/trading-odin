@@ -35,12 +35,12 @@ DAYS_PER_MONTH : [48]int = \
     31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31, \
 }
 
-Timestamp_ToPixelX :: proc(timestamp : i32, scaleData : ScaleData) -> i32
+Timestamp_ToPixelX :: proc(timestamp : i32, scaleData : ScaleData) -> f32
 {
-	return i32(f64(timestamp) / (scaleData.horizontalScale * scaleData.horizontalZoom))
+	return f32(f64(timestamp) / (scaleData.horizontalScale * scaleData.horizontalZoom))
 }
 
-Timestamp_FromPixelX :: proc(pixelX : i32, scaleData : ScaleData) -> i32
+Timestamp_FromPixelX :: proc(pixelX : f32, scaleData : ScaleData) -> i32
 {
 	return i32(f64(pixelX) * scaleData.horizontalScale * scaleData.horizontalZoom)
 }

@@ -528,9 +528,9 @@ VolumeProfile_Destroy :: proc(profile : VolumeProfile)
 }
 
 VolumeProfile_Draw :: proc(profile : VolumeProfile, \
-                           posX : i32, \
-                           width : i32, \
-                           cameraPosY : i32, \
+                           posX : f32, \
+                           width : f32, \
+                           cameraPosY : f32, \
                            scaleData : ScaleData, \
                            alpha : u8 = 255, \
                            drawFlags : VolumeProfile_DrawFlagSet = {.BODY, .POC, .VAL, .VAH, .TV_VAL, .TV_VAH, .VWAP})
@@ -541,7 +541,7 @@ VolumeProfile_Draw :: proc(profile : VolumeProfile, \
     {
         highestBucketVolume := profile.buckets[profile.pocIndex].buyVolume + profile.buckets[profile.pocIndex].sellVolume
 
-        bucketIndex := math.max(0,                    VolumeProfile_PixelYToBucket(profile, cameraPosY + GetScreenHeight(), scaleData))
+        bucketIndex := math.max(0,                    VolumeProfile_PixelYToBucket(profile, cameraPosY + f32(GetScreenHeight()), scaleData))
         endIndex :=    math.min(len(profile.buckets), VolumeProfile_PixelYToBucket(profile, cameraPosY, scaleData) + 1)
         
         blueColor := VOLUME_PROFILE_BUY_COLOR
@@ -571,11 +571,11 @@ VolumeProfile_Draw :: proc(profile : VolumeProfile, \
 
             bucketThickness := math.max(bucketStartPixel - bucketEndPixel, 1)
 
-            buyPixels := i32(buyVolume / highestBucketVolume * f32(width))
-            sellPixels := i32((totalVolume - buyVolume) / highestBucketVolume * f32(width))
+            buyPixels := buyVolume / highestBucketVolume * width
+            sellPixels := (totalVolume - buyVolume) / highestBucketVolume * width
 
-            DrawRectangle(posX, bucketEndPixel, buyPixels, bucketThickness, blueColor)
-            DrawRectangle(posX + buyPixels, bucketEndPixel, sellPixels, bucketThickness, orangeColor)
+            DrawRectangleRec(Rectangle{posX, bucketEndPixel, buyPixels, bucketThickness}, blueColor)
+            DrawRectangleRec(Rectangle{posX + buyPixels, bucketEndPixel, sellPixels, bucketThickness}, orangeColor)
 
             bucketIndex += 1
         }
@@ -591,7 +591,7 @@ VolumeProfile_Draw :: proc(profile : VolumeProfile, \
 
         bucketThickness := math.max(bucketStartPixel - bucketEndPixel, 1)
 
-        DrawRectangle(posX, bucketEndPixel, width, bucketThickness, color)
+        DrawRectangleRec(Rectangle{posX, bucketEndPixel, width, bucketThickness}, color)
     }
 
     if .VAL in drawFlags
@@ -604,7 +604,7 @@ VolumeProfile_Draw :: proc(profile : VolumeProfile, \
 
         bucketThickness := math.max(bucketStartPixel - bucketEndPixel, 1)
 
-        DrawRectangle(posX, bucketEndPixel, width, bucketThickness, color)
+        DrawRectangleRec(Rectangle{posX, bucketEndPixel, width, bucketThickness}, color)
     }
 
     if .VAH in drawFlags
@@ -617,7 +617,7 @@ VolumeProfile_Draw :: proc(profile : VolumeProfile, \
 
         bucketThickness := math.max(bucketStartPixel - bucketEndPixel, 1)
 
-        DrawRectangle(posX, bucketEndPixel, width, bucketThickness, color)
+        DrawRectangleRec(Rectangle{posX, bucketEndPixel, width, bucketThickness}, color)
     }
 
     if .TV_VAL in drawFlags
@@ -630,7 +630,7 @@ VolumeProfile_Draw :: proc(profile : VolumeProfile, \
 
         bucketThickness := math.max(bucketStartPixel - bucketEndPixel, 1)
 
-        DrawRectangle(posX, bucketEndPixel, width, bucketThickness, color)
+        DrawRectangleRec(Rectangle{posX, bucketEndPixel, width, bucketThickness}, color)
     }
 
     if .TV_VAH in drawFlags
@@ -643,7 +643,7 @@ VolumeProfile_Draw :: proc(profile : VolumeProfile, \
 
         bucketThickness := math.max(bucketStartPixel - bucketEndPixel, 1)
 
-        DrawRectangle(posX, bucketEndPixel, width, bucketThickness, color)
+        DrawRectangleRec(Rectangle{posX, bucketEndPixel, width, bucketThickness}, color)
     }
 
     if .VWAP in drawFlags
@@ -653,7 +653,7 @@ VolumeProfile_Draw :: proc(profile : VolumeProfile, \
         color := VWAP_COLOR
         color.a = alpha
 
-        DrawRectangle(posX, pixelY, width, 1, color)
+        DrawRectangleRec(Rectangle{posX, pixelY, width, 1}, color)
     }
 }
 
@@ -672,7 +672,7 @@ VolumeProfile_BucketToPrice :: proc(profile : VolumeProfile, index : int, roundD
     //}
 }
 
-VolumeProfile_BucketToPixelY :: proc(profile : VolumeProfile, index : int, scaleData : ScaleData, roundDown : bool = false) -> i32
+VolumeProfile_BucketToPixelY :: proc(profile : VolumeProfile, index : int, scaleData : ScaleData, roundDown : bool = false) -> f32
 {
     return Price_ToPixelY(VolumeProfile_BucketToPrice(profile, index, roundDown), scaleData)
 }
@@ -682,7 +682,7 @@ VolumeProfile_PriceToBucket :: proc(profile : VolumeProfile, price : f32) -> int
     return int((price - profile.bottomPrice) / profile.bucketSize)
 }
 
-VolumeProfile_PixelYToBucket :: proc(profile : VolumeProfile, pixelY : i32, scaleData : ScaleData) -> int
+VolumeProfile_PixelYToBucket :: proc(profile : VolumeProfile, pixelY : f32, scaleData : ScaleData) -> int
 {
     return VolumeProfile_PriceToBucket(profile, Price_FromPixelY(pixelY, scaleData))
 }
