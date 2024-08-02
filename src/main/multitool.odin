@@ -106,7 +106,6 @@ Multitool_IsOverlappingPoint :: proc(multitool : Multitool, posX : f32, posY : f
 		   posY >= pixelY - LINE_SELECTION_THICKNESS &&
 		   posY < pixelY + LINE_SELECTION_THICKNESS
 		{
-			fmt.println("Overlap 618")
 			return true
 		}
 	}
@@ -298,45 +297,51 @@ Multitool_Draw :: proc(multitool : Multitool, cameraPosX : f32, cameraPosY : f32
 		boxX := Timestamp_ToPixelX(result.entryTimestamp, scaleData)
 		boxWidth := Timestamp_ToPixelX(result.exitTimestamp, scaleData) - boxX
 		boxX -= cameraPosX
+		
+		entry := Price_ToPixelY(result.entry, scaleData) - cameraPosY
 
-		if boxWidth == 0
+		colors := [2]Color{RED, GREEN}
+		
+		if boxWidth < 5
 		{
-			continue
+			// Draw circle
+			DrawRectangleRec(Rectangle{boxX - 1, entry - 2, 3, 5}, WHITE)
+			DrawRectangleRec(Rectangle{boxX - 2, entry - 1, 5, 3}, WHITE)
+			DrawRectangleRec(Rectangle{boxX - 1, entry - 1, 3, 3}, colors[int(result.isWin)])
 		}
-
-		target := Price_ToPixelY(result.target, scaleData)
-		entry := Price_ToPixelY(result.entry, scaleData)
-		stopLoss := Price_ToPixelY(result.stopLoss, scaleData)
-
-		red := RED
-		red.a = 63
-		green := GREEN
-		green.a = 63
-
-		// Long
-		if result.target > result.stopLoss
+		else
 		{
-			boxY := target - cameraPosY
-			boxHeight := entry - target
+			// Draw position
+			target := Price_ToPixelY(result.target, scaleData) - cameraPosY
+			stopLoss := Price_ToPixelY(result.stopLoss, scaleData) - cameraPosY
 
-			DrawRectangleRec(Rectangle{boxX, boxY, boxWidth, boxHeight}, green)
+			red := RED
+			red.a = 63
+			green := GREEN
+			green.a = 63
 
-			boxY = entry - cameraPosY
-			boxHeight = stopLoss - entry
-			
-			DrawRectangleRec(Rectangle{boxX, boxY, boxWidth, boxHeight}, red)
- 		}
-		else // Short
-		{
-			boxY := stopLoss - cameraPosY
-			boxHeight := entry - stopLoss
+			// Long
+			if result.target > result.stopLoss
+			{
+				boxHeight := entry - target
+				DrawRectangleRec(Rectangle{boxX, target, boxWidth, boxHeight}, green)
 
-			DrawRectangleRec(Rectangle{boxX, boxY, boxWidth, boxHeight}, red)
+				boxHeight = stopLoss - entry
+				DrawRectangleRec(Rectangle{boxX, entry, boxWidth, boxHeight}, red)
+	 		}
+			else // Short
+			{
+				boxHeight := entry - stopLoss
+				DrawRectangleRec(Rectangle{boxX, stopLoss, boxWidth, boxHeight}, red)
 
-			boxY = entry - cameraPosY
-			boxHeight = target - entry
-			
-			DrawRectangleRec(Rectangle{boxX, boxY, boxWidth, boxHeight}, green)
+				boxHeight = target - entry
+				DrawRectangleRec(Rectangle{boxX, entry, boxWidth, boxHeight}, green)
+			}
+
+			outlineY := math.min(stopLoss, target)
+			outlineHeight := math.max(target, stopLoss) - outlineY
+
+			DrawRectangleLinesEx(Rectangle{boxX, outlineY, boxWidth, outlineHeight}, 1, colors[int(result.isWin)])
 		}
 	}
 
