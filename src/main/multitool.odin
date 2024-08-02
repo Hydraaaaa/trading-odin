@@ -37,10 +37,10 @@ Multitool :: struct
 
 	tools : ToolSet,
 
-    volumeProfile : VolumeProfile,
-    volumeProfileDrawFlags : VolumeProfile_DrawFlagSet,
+	volumeProfile : VolumeProfile,
+	volumeProfileDrawFlags : VolumeProfile_DrawFlagSet,
 
-    draw618 : bool,
+	draw618 : bool,
 
 	strategyResults : [dynamic]Result,
 }
@@ -70,7 +70,7 @@ MultitoolHandle :: enum
 
 Multitool_Destroy :: proc(multitool : Multitool)
 {
-    VolumeProfile_Destroy(multitool.volumeProfile)
+	VolumeProfile_Destroy(multitool.volumeProfile)
 }
 
 Multitool_IsOverlapping :: proc{Multitool_IsOverlappingPoint, Multitool_IsOverlappingRect}
@@ -426,9 +426,31 @@ Multitool_DrawHandles :: proc(multitool : Multitool, cameraPosX : f32, cameraPos
 	// Hotbar
 	HOTBAR_COLOR :: raylib.Color{30, 34, 45, 255}
 	HOTBAR_SELECTED_COLOR :: raylib.Color{42, 46, 57, 255}
+	HOTBAR_PADDING :: 8
 
-	hotbarX := posX + width / 2 - HOTBAR_WIDTH / 2 - cameraPosX
-	hotbarY := posY + height - HOTBAR_HEIGHT - 8 - cameraPosY
+	hotbarX : f32 = posX + width / 2 - HOTBAR_WIDTH / 2 - cameraPosX
+	hotbarY : f32 = ---
+
+	// If multitool is too small
+	if width < HOTBAR_WIDTH + HOTBAR_PADDING * 2 ||
+	   height < HOTBAR_HEIGHT + HOTBAR_PADDING * 2
+	{
+		// Place hotbar below multitool
+		hotbarY = posY + height + HOTBAR_PADDING - cameraPosY
+	}
+	else
+	{
+		// Place hotbar inside multitool
+		hotbarY = posY + height - HOTBAR_HEIGHT - HOTBAR_PADDING - cameraPosY
+		
+		// Clamp to screen bounds
+		hotbarX = math.clamp(hotbarX, HOTBAR_PADDING, f32(GetScreenWidth()) - HOTBAR_PADDING - HOTBAR_WIDTH - 60)
+		hotbarY = math.clamp(hotbarY, HOTBAR_PADDING, f32(GetScreenHeight()) - HOTBAR_PADDING - HOTBAR_HEIGHT - labelHeight)
+
+		// Clamp to multitool bounds
+		hotbarX = math.clamp(hotbarX, posX - cameraPosX + HOTBAR_PADDING, posX + width - cameraPosX - HOTBAR_WIDTH - HOTBAR_PADDING)
+		hotbarY = math.clamp(hotbarY, posY - cameraPosY + HOTBAR_PADDING, posY + height - cameraPosY - HOTBAR_HEIGHT - HOTBAR_PADDING)
+	}
 
 	DrawRectangleRounded({hotbarX, hotbarY, HOTBAR_WIDTH, HOTBAR_HEIGHT}, HOTBAR_ROUNDING, 16, HOTBAR_COLOR)
 
