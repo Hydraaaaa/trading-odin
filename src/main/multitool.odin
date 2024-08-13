@@ -78,7 +78,7 @@ Multitool_IsOverlapping :: proc{Multitool_IsOverlappingPoint, Multitool_IsOverla
 // Precise, used for cursor
 Multitool_IsOverlappingPoint :: proc(multitool : Multitool, posX : f32, posY : f32, scaleData : ScaleData) -> bool
 {
-	if !Multitool_IsOverlappingRect(multitool, posX, posY, 1, 1, scaleData)
+	if !Multitool_IsOverlappingRect(multitool, posX, posY, 0, 0, scaleData)
 	{
 		return false
 	}
