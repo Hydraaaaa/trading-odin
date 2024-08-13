@@ -126,8 +126,8 @@ main :: proc()
 	scaleData.horizontalScale = f64(CandleList_IndexToDuration(chart.candles[START_ZOOM_INDEX], 0) / (ZOOM_THRESHOLD * 2))
 	scaleData.logScale = true
 
-	cameraPosX : f32
-	cameraPosY : f32
+	cameraX : f32
+	cameraY : f32
 
 	zoomIndex := START_ZOOM_INDEX
 	zoomLevel := 0
@@ -173,11 +173,11 @@ main :: proc()
 	{
 		candleIndex := i32(len(chart.candles[zoomIndex].candles) - 1)
 
-		cameraPosX = f32(f64(CandleList_IndexToTimestamp(chart.candles[zoomIndex], i32(len(chart.candles[zoomIndex].candles))) + CandleList_IndexToDuration(chart.candles[zoomIndex], candleIndex)) / scaleData.horizontalScale - INITIAL_SCREEN_WIDTH + 70)
+		cameraX = f32(f64(CandleList_IndexToTimestamp(chart.candles[zoomIndex], i32(len(chart.candles[zoomIndex].candles))) + CandleList_IndexToDuration(chart.candles[zoomIndex], candleIndex)) / scaleData.horizontalScale - INITIAL_SCREEN_WIDTH + 70)
 	}
 
-	cameraTimestamp := i32(f64(cameraPosX) * scaleData.horizontalScale)
-	cameraEndTimestamp := i32(f64(cameraPosX + INITIAL_SCREEN_WIDTH) * scaleData.horizontalScale)
+	cameraTimestamp := i32(f64(cameraX) * scaleData.horizontalScale)
+	cameraEndTimestamp := i32(f64(cameraX + INITIAL_SCREEN_WIDTH) * scaleData.horizontalScale)
 
 	// Slice of all candles that currently fit within the width of the screen
 	visibleCandles : []Candle
@@ -212,13 +212,13 @@ main :: proc()
 
 		initialVerticalScale = f64(math.log10(high) - math.log10(low)) / (INITIAL_SCREEN_HEIGHT - 64)
 
-		cameraPosY = f32(-(f64(middle) / initialVerticalScale) - INITIAL_SCREEN_HEIGHT / 2)
+		cameraY = f32(-(f64(middle) / initialVerticalScale) - INITIAL_SCREEN_HEIGHT / 2)
 	}
 
 	scaleData.verticalScale = initialVerticalScale
 
-	cameraTopPrice : f32 = Price_FromPixelY(cameraPosY, scaleData)
-	cameraBottomPrice : f32 = Price_FromPixelY(cameraPosY + screenHeight, scaleData)
+	cameraTopPrice : f32 = Price_FromPixelY(cameraY, scaleData)
+	cameraBottomPrice : f32 = Price_FromPixelY(cameraY + screenHeight, scaleData)
 
 	reserve(&chart.dailyVolumeProfiles, len(chart.candles[Timeframe.DAY].candles) + 7)
 	resize(&chart.dailyVolumeProfiles, len(chart.candles[Timeframe.DAY].candles))
@@ -260,9 +260,9 @@ main :: proc()
 				newScreenHeight = GetScreenHeight()
 			}
 
-			cameraPosX -= f32(newScreenWidth) - screenWidth
+			cameraX -= f32(newScreenWidth) - screenWidth
 
-			cameraPrice : f32 = Price_FromPixelY(cameraPosY + screenHeight / 2, scaleData)
+			cameraPrice : f32 = Price_FromPixelY(cameraY + screenHeight / 2, scaleData)
 
 			initialVerticalScale *= f64(screenHeight) / f64(newScreenHeight)
 			scaleData.verticalScale *= f64(screenHeight) / f64(newScreenHeight)
@@ -270,7 +270,7 @@ main :: proc()
 			screenWidth = f32(newScreenWidth)
 			screenHeight = f32(newScreenHeight)
 
-			cameraPosY = Price_ToPixelY(cameraPrice, scaleData) - screenHeight / 2
+			cameraY = Price_ToPixelY(cameraPrice, scaleData) - screenHeight / 2
 		}
 
 		if IsKeyPressed(.F11)
@@ -294,7 +294,7 @@ main :: proc()
 		{
 			// We add one pixel to the cursor's position, as all of the candles' timestamps get rounded down when converted
 			// As we are doing the opposite conversion, the mouse will always be less than or equal to the candles
-			cursorTimestamp = Timestamp_FromPixelX(f32(GetMouseX()) + cameraPosX + 1, scaleData)
+			cursorTimestamp = Timestamp_FromPixelX(f32(GetMouseX()) + cameraX + 1, scaleData)
 			cursorCandleIndex = CandleList_TimestampToIndex_Clamped(chart.candles[zoomIndex], cursorTimestamp)
 			cursorCandle = chart.candles[zoomIndex].candles[cursorCandleIndex]
 		}
@@ -303,7 +303,7 @@ main :: proc()
 
 		if selectedMultitool != nil
 		{
-			hoveredHandle = Multitool_HandleAt(selectedMultitool^, f32(GetMouseX()) + cameraPosX, f32(GetMouseY()) + cameraPosY, scaleData)
+			hoveredHandle = Multitool_HandleAt(selectedMultitool^, f32(GetMouseX()), f32(GetMouseY()), cameraX, cameraY, scaleData)
 		}
 	
 		// TODO: Hover least recently selected multitool when multiple are hovered
@@ -315,7 +315,7 @@ main :: proc()
 			// Reverse order to match visual order
 			for i := len(multitools) - 1; i >= 0; i -= 1
 			{
-				if Multitool_IsOverlapping(multitools[i], f32(GetMouseX()) + cameraPosX, f32(GetMouseY()) + cameraPosY, scaleData)
+				if Multitool_IsOverlapping(multitools[i], f32(GetMouseX()) + cameraX, f32(GetMouseY()) + cameraY, scaleData)
 				{
 					hoveredMultitool = &multitools[i]
 					hoveredMultitoolIndex = i
@@ -623,8 +623,8 @@ main :: proc()
 				{
 					hasMouseMovedSelection = true
 
-					cameraPosX -= mouseDelta.x
-					cameraPosY -= mouseDelta.y
+					cameraX -= mouseDelta.x
+					cameraY -= mouseDelta.y
 				}
 			}
 		}
@@ -635,7 +635,7 @@ main :: proc()
 		if IsMouseButtonPressed(.RIGHT)
 		{
 			rightDragging = true
-			rightDraggingPriceStart = Price_FromPixelY(cameraPosY + screenHeight / 2, scaleData)
+			rightDraggingPriceStart = Price_FromPixelY(cameraY + screenHeight / 2, scaleData)
 		}
 
 		if IsMouseButtonReleased(.RIGHT)
@@ -654,7 +654,7 @@ main :: proc()
 			verticalZoomLevel += GetMouseDelta().y
 			scaleData.verticalScale = initialVerticalScale * math.exp(f64(verticalZoomLevel) / 500)
 
-			cameraPosY = Price_ToPixelY(rightDraggingPriceStart, scaleData) - screenHeight / 2
+			cameraY = Price_ToPixelY(rightDraggingPriceStart, scaleData) - screenHeight / 2
 		}
 
 		// Zooming
@@ -663,8 +663,8 @@ main :: proc()
 			zoomLevel -= int(GetMouseWheelMove())
 
 			// Remove zoom from screen space as we adjust it
-			cameraCenterX : f64 = (f64(cameraPosX) + f64(screenWidth) / 2) * scaleData.horizontalZoom
-			cameraCenterY : f64 = (f64(cameraPosY) + f64(screenHeight) / 2) * scaleData.verticalZoom
+			cameraCenterX : f64 = (f64(cameraX) + f64(screenWidth) / 2) * scaleData.horizontalZoom
+			cameraCenterY : f64 = (f64(cameraY) + f64(screenHeight) / 2) * scaleData.verticalZoom
 
 			scaleData.horizontalZoom = 1
 			scaleData.verticalZoom = 1
@@ -694,8 +694,8 @@ main :: proc()
 			}
 
 			// Re-add zoom post update
-			cameraPosX = f32(cameraCenterX / scaleData.horizontalZoom - f64(screenWidth) / 2)
-			cameraPosY = f32(cameraCenterY / scaleData.verticalZoom - f64(screenHeight) / 2)
+			cameraX = f32(cameraCenterX / scaleData.horizontalZoom - f64(screenWidth) / 2)
+			cameraY = f32(cameraCenterY / scaleData.verticalZoom - f64(screenHeight) / 2)
 		}
 
 		// Check download thread
@@ -726,8 +726,8 @@ main :: proc()
 		}
 
 		// Update visibleCandles
-		cameraTimestamp = Timestamp_FromPixelX(cameraPosX, scaleData)
-		cameraEndTimestamp = Timestamp_FromPixelX(cameraPosX + screenWidth, scaleData)
+		cameraTimestamp = Timestamp_FromPixelX(cameraX, scaleData)
+		cameraEndTimestamp = Timestamp_FromPixelX(cameraX + screenWidth, scaleData)
 		visibleCandles, visibleCandlesStartIndex = CandleList_CandlesBetweenTimestamps(chart.candles[zoomIndex], cameraTimestamp, cameraEndTimestamp)
 		highestCandle, highestCandleIndex = Candle_HighestHigh(visibleCandles)
 		lowestCandle, lowestCandleIndex = Candle_LowestLow(visibleCandles)
@@ -735,8 +735,8 @@ main :: proc()
 		highestCandleIndex += visibleCandlesStartIndex
 		lowestCandleIndex += visibleCandlesStartIndex
 
-		cameraTopPrice = Price_FromPixelY(cameraPosY, scaleData)
-		cameraBottomPrice = Price_FromPixelY(cameraPosY + screenHeight, scaleData)
+		cameraTopPrice = Price_FromPixelY(cameraY, scaleData)
+		cameraBottomPrice = Price_FromPixelY(cameraY + screenHeight, scaleData)
 
 		if IsKeyPressed(.L)
 		{
@@ -756,7 +756,7 @@ main :: proc()
 			prePixelUpper : f32 = Price_ToPixelY(priceUpper, scaleData)
 			prePixelLower : f32 = Price_ToPixelY(priceLower, scaleData)
 
-			pixelOffset : f32 = prePixelUpper - cameraPosY
+			pixelOffset : f32 = prePixelUpper - cameraY
 
 			scaleData.logScale = !scaleData.logScale
 
@@ -768,7 +768,7 @@ main :: proc()
 			initialVerticalScale *= difference
 			scaleData.verticalScale *= difference
 
-			cameraPosY = Price_ToPixelY(priceUpper, scaleData) - pixelOffset
+			cameraY = Price_ToPixelY(priceUpper, scaleData) - pixelOffset
 		}
 
 		if IsKeyPressed(.DELETE) &&
@@ -794,13 +794,13 @@ main :: proc()
 
 			mouseY := f32(GetMouseY())
 
-			high := Price_ToPixelY(cursorCandle.high, scaleData) - cameraPosY
-			low := Price_ToPixelY(cursorCandle.low, scaleData) - cameraPosY
+			high := Price_ToPixelY(cursorCandle.high, scaleData) - cameraY
+			low := Price_ToPixelY(cursorCandle.low, scaleData) - cameraY
 
 			midHighPrice := math.max(cursorCandle.open, cursorCandle.close)
 			midLowPrice := math.min(cursorCandle.open, cursorCandle.close)
-			midHigh := Price_ToPixelY(midHighPrice, scaleData) - cameraPosY
-			midLow := Price_ToPixelY(midLowPrice, scaleData) - cameraPosY
+			midHigh := Price_ToPixelY(midHighPrice, scaleData) - cameraY
+			midLow := Price_ToPixelY(midLowPrice, scaleData) - cameraY
 
 			highestSnap := high - SNAP_PIXELS
 			lowestSnap := low + SNAP_PIXELS
@@ -838,7 +838,7 @@ main :: proc()
 			}
 			else
 			{
-				cursorSnapPrice = Price_FromPixelY(mouseY + cameraPosY, scaleData)
+				cursorSnapPrice = Price_FromPixelY(mouseY + cameraY, scaleData)
 			}
 		}
 
@@ -877,8 +877,8 @@ main :: proc()
 		{
 			priceIncrements : [4]f32 = {1, 2.5, 5, 10}
 
-			topLabelPrice := Price_FromPixelY(cameraPosY - labelHeight / 2, scaleData)
-			priceDifference := math.min(Price_FromPixelY(cameraPosY - labelHeight / 2 - priceLabelSpacing, scaleData) - topLabelPrice, MAX_PRICE_DIFFERENCE)
+			topLabelPrice := Price_FromPixelY(cameraY - labelHeight / 2, scaleData)
+			priceDifference := math.min(Price_FromPixelY(cameraY - labelHeight / 2 - priceLabelSpacing, scaleData) - topLabelPrice, MAX_PRICE_DIFFERENCE)
 
 			currentMagnitude := MAX_PRICE_DIFFERENCE
 
@@ -909,7 +909,7 @@ main :: proc()
 			prevPrice := topLabelPrice
 			prevPixel := Price_ToPixelY(prevPrice, scaleData)
 
-			for prevPixel < cameraPosY + screenHeight
+			for prevPixel < cameraY + screenHeight
 			{
 				currentPrice := Price_FromPixelY(prevPixel + priceLabelSpacing, scaleData)
 				priceDifference = prevPrice - currentPrice
@@ -977,8 +977,8 @@ main :: proc()
 
 			priceIncrement := i32(priceIncrementMultiplier * priceIncrements[priceIncrementIndex])
 
-			screenTopPrice := i32(Price_FromPixelY(cameraPosY, scaleData) / MIN_DECIMAL)
-			screenBottomPrice := i32(Price_FromPixelY(cameraPosY + screenHeight, scaleData) / MIN_DECIMAL)
+			screenTopPrice := i32(Price_FromPixelY(cameraY, scaleData) / MIN_DECIMAL)
+			screenBottomPrice := i32(Price_FromPixelY(cameraY + screenHeight, scaleData) / MIN_DECIMAL)
 
 			// Round to the nearest increment (which lies above the screen border)
 			currentPrice := screenTopPrice + priceIncrement - screenTopPrice % priceIncrement
@@ -1011,7 +1011,7 @@ main :: proc()
 		// Draw Price Lines
 		for label in priceLabels
 		{
-			pixelY := Price_ToPixelY(label.price, scaleData) - cameraPosY
+			pixelY := Price_ToPixelY(label.price, scaleData) - cameraY
 
 			DrawRectangleRec(Rectangle{0, pixelY, screenWidth - label.width, 1}, label.color)
 		}
@@ -1263,7 +1263,7 @@ main :: proc()
 
 		for label in timestampLabels
 		{
-			pixelX := Timestamp_ToPixelX(label.timestamp, scaleData) - cameraPosX
+			pixelX := Timestamp_ToPixelX(label.timestamp, scaleData) - cameraX
 
 			DrawRectangleRec(Rectangle{pixelX, 0, 1, timeAxisLineHeight}, label.color)
 		}
@@ -1277,12 +1277,12 @@ main :: proc()
 			{
 				for level in closeLevels.levels
 				{
-					pixelY := Price_ToPixelY(level.price, scaleData) - cameraPosY
+					pixelY := Price_ToPixelY(level.price, scaleData) - cameraY
 
 					// endX := endTimestamp == -1 ? screenWidth : endTimestamp
-					endX := screenWidth * f32(i32(level.endTimestamp == -1)) + Timestamp_ToPixelX(level.endTimestamp, scaleData) - cameraPosX * f32(i32(level.endTimestamp != -1))
+					endX := screenWidth * f32(i32(level.endTimestamp == -1)) + Timestamp_ToPixelX(level.endTimestamp, scaleData) - cameraX * f32(i32(level.endTimestamp != -1))
 
-					DrawLineV(Vector2{Timestamp_ToPixelX(level.startTimestamp, scaleData) - cameraPosX, pixelY}, Vector2{endX, pixelY}, closeLevels.color)
+					DrawLineV(Vector2{Timestamp_ToPixelX(level.startTimestamp, scaleData) - cameraX, pixelY}, Vector2{endX, pixelY}, closeLevels.color)
 				}
 			}
 		}
@@ -1305,7 +1305,7 @@ main :: proc()
 
 				dayOfWeek := Timestamp_ToDayOfWeek(CandleList_IndexToTimestamp(chart.candles[Timeframe.DAY], i32(i)))
 
-				DrawRectangleRec(Rectangle{startPixel - cameraPosX, 0, endPixel - startPixel, screenHeight}, colors[dayOfWeek])
+				DrawRectangleRec(Rectangle{startPixel - cameraX, 0, endPixel - startPixel, screenHeight}, colors[dayOfWeek])
 			}
 		}
 
@@ -1335,9 +1335,9 @@ main :: proc()
 				newYorkLength := Timestamp_ToPixelX(1800 * 13, scaleData)
 				endTimestamp := startTimestamp + 10800
 
-				DrawRectangleRec(Rectangle{asiaStart - cameraPosX, 0, asiaLength, screenHeight}, asia)
-				DrawRectangleRec(Rectangle{londonStart - cameraPosX, 0, londonLength, screenHeight}, london)
-				DrawRectangleRec(Rectangle{newYorkStart - cameraPosX, 0, newYorkLength, screenHeight}, newYork)
+				DrawRectangleRec(Rectangle{asiaStart - cameraX, 0, asiaLength, screenHeight}, asia)
+				DrawRectangleRec(Rectangle{londonStart - cameraX, 0, londonLength, screenHeight}, london)
+				DrawRectangleRec(Rectangle{newYorkStart - cameraX, 0, newYorkLength, screenHeight}, newYork)
 			}
 		}
 
@@ -1355,13 +1355,13 @@ main :: proc()
 
 				for candle, i in visibleHTFCandles
 				{
-					xPos := CandleList_IndexToPixelX(chart.candles[zoomIndexHTF], i32(i) + visibleHTFCandlesStartIndex, scaleData) - cameraPosX
+					xPos := CandleList_IndexToPixelX(chart.candles[zoomIndexHTF], i32(i) + visibleHTFCandlesStartIndex, scaleData) - cameraX
 					candleWidth := CandleList_IndexToWidth(chart.candles[zoomIndexHTF], i32(i) + visibleHTFCandlesStartIndex, scaleData)
 
 					bodyPosY := Price_ToPixelY(math.max(candle.open, candle.close), scaleData)
 					bodyHeight := math.max(Price_ToPixelY(math.min(candle.open, candle.close), scaleData) - bodyPosY, 1)
 
-					DrawRectangleLinesEx(Rectangle{xPos, bodyPosY - cameraPosY, candleWidth, bodyHeight}, 1, outlineColors[int(candle.close <= candle.open)])
+					DrawRectangleLinesEx(Rectangle{xPos, bodyPosY - cameraY, candleWidth, bodyHeight}, 1, outlineColors[int(candle.close <= candle.open)])
 				}
 			}
 		}
@@ -1372,7 +1372,7 @@ main :: proc()
 		// Draw Candles
 		for candle, i in visibleCandles
 		{
-			xPos := CandleList_IndexToPixelX(chart.candles[zoomIndex], i32(i) + visibleCandlesStartIndex, scaleData) - cameraPosX
+			xPos := CandleList_IndexToPixelX(chart.candles[zoomIndex], i32(i) + visibleCandlesStartIndex, scaleData) - cameraX
 			candleWidth := CandleList_IndexToWidth(chart.candles[zoomIndex], i32(i) + visibleCandlesStartIndex, scaleData)
 
 			bodyPosY := Price_ToPixelY(math.max(candle.open, candle.close), scaleData)
@@ -1381,8 +1381,8 @@ main :: proc()
 			wickPosY := Price_ToPixelY(candle.high, scaleData)
 			wickHeight := Price_ToPixelY(candle.low, scaleData) - wickPosY
 
-			DrawRectangleRec(Rectangle{xPos, bodyPosY - cameraPosY, candleWidth, bodyHeight}, candleColors[int(candle.close <= candle.open)]) // Body
-			DrawRectangleRec(Rectangle{xPos + f32(candleWidth) / 2 - 0.5, wickPosY - cameraPosY, 1, wickHeight}, candleColors[int(candle.close <= candle.open)]) // Wick
+			DrawRectangleRec(Rectangle{xPos, bodyPosY - cameraY, candleWidth, bodyHeight}, candleColors[int(candle.close <= candle.open)]) // Body
+			DrawRectangleRec(Rectangle{xPos + f32(candleWidth) / 2 - 0.5, wickPosY - cameraY, 1, wickHeight}, candleColors[int(candle.close <= candle.open)]) // Wick
 		}
 
 		// Draw previous week volume profiles
@@ -1408,7 +1408,7 @@ main :: proc()
 				startPixel := CandleList_IndexToPixelX(chart.candles[Timeframe.WEEK], i32(i) + 1, scaleData)
 				endPixel := CandleList_IndexToPixelX(chart.candles[Timeframe.WEEK], i32(i) + 2, scaleData)
 
-				VolumeProfile_Draw(chart.weeklyVolumeProfiles[i], startPixel - cameraPosX, endPixel - startPixel, cameraPosY, scaleData, 95, {.POC, .VAL, .VAH, .TV_VAL, .TV_VAH, .VWAP})
+				VolumeProfile_Draw(chart.weeklyVolumeProfiles[i], startPixel - cameraX, endPixel - startPixel, cameraY, scaleData, 95, {.POC, .VAL, .VAH, .TV_VAL, .TV_VAH, .VWAP})
 			}
 		}
 
@@ -1444,7 +1444,7 @@ main :: proc()
 				startPixel := CandleList_IndexToPixelX(chart.candles[Timeframe.DAY], i32(i) + 1, scaleData)
 				endPixel := CandleList_IndexToPixelX(chart.candles[Timeframe.DAY], i32(i) + 2, scaleData)
 
-				VolumeProfile_Draw(chart.dailyVolumeProfiles[i], startPixel - cameraPosX, endPixel - startPixel, cameraPosY, scaleData, 63, {.POC, .VAL, .VAH, .TV_VAL, .TV_VAH, .VWAP})
+				VolumeProfile_Draw(chart.dailyVolumeProfiles[i], startPixel - cameraX, endPixel - startPixel, cameraY, scaleData, 63, {.POC, .VAL, .VAH, .TV_VAL, .TV_VAH, .VWAP})
 			}
 		}
 
@@ -1462,8 +1462,8 @@ main :: proc()
 
 			if len(visibleDeltas) > 0
 			{
-				highestPixel := Price_ToPixelY(highestClose, scaleData) - f32(cameraPosY)
-				lowestPixel := Price_ToPixelY(lowestClose, scaleData) - f32(cameraPosY)
+				highestPixel := Price_ToPixelY(highestClose, scaleData) - f32(cameraY)
+				lowestPixel := Price_ToPixelY(lowestClose, scaleData) - f32(cameraY)
 				pixelRange := highestPixel - lowestPixel
 
 				highestDelta := visibleDeltas[0]
@@ -1477,14 +1477,14 @@ main :: proc()
 
 				deltaRange := highestDelta - lowestDelta
 
-				highestCandleY := Price_ToPixelY(highestClose, scaleData) - cameraPosY
-				lowestCandleY := Price_ToPixelY(lowestClose, scaleData) - cameraPosY
+				highestCandleY := Price_ToPixelY(highestClose, scaleData) - cameraY
+				lowestCandleY := Price_ToPixelY(lowestClose, scaleData) - cameraY
 
 				points : [1000]Vector2 = ---
 
 				for delta, i in visibleDeltas
 				{
-					points[i].x = f32(CandleList_IndexToPixelX(chart.candles[zoomIndex], visibleCandlesStartIndex + i32(i) + 1, scaleData) - cameraPosX)
+					points[i].x = f32(CandleList_IndexToPixelX(chart.candles[zoomIndex], visibleCandlesStartIndex + i32(i) + 1, scaleData) - cameraX)
 					points[i].y = f32((delta - lowestDelta) / deltaRange) * pixelRange + lowestPixel
 				}
 
@@ -1494,9 +1494,9 @@ main :: proc()
 
 		for multitool in multitools
 		{
-			if Multitool_IsOverlapping(multitool, cameraPosX, cameraPosY, screenWidth, screenHeight, scaleData)
+			if Multitool_IsOverlapping(multitool, cameraX, cameraY, screenWidth, screenHeight, scaleData)
 			{
-				Multitool_Draw(multitool, cameraPosX, cameraPosY, scaleData)
+				Multitool_Draw(multitool, cameraX, cameraY, scaleData)
 			}
 		}
 
@@ -1506,12 +1506,12 @@ main :: proc()
 			posY := Price_ToPixelY(hoveredMultitool.high, scaleData)
 			width := Timestamp_ToPixelX(hoveredMultitool.endTimestamp, scaleData) - posX
 			height := Price_ToPixelY(hoveredMultitool.low, scaleData) - posY
-			DrawRectangleLinesEx(Rectangle{posX - cameraPosX, posY - cameraPosY, width, height}, 1, {255, 255, 255, 127})
+			DrawRectangleLinesEx(Rectangle{posX - cameraX, posY - cameraY, width, height}, 1, {255, 255, 255, 127})
 		}
 
 		if selectedMultitool != nil
 		{
-			Multitool_DrawHandles(selectedMultitool^, cameraPosX, cameraPosY, scaleData)
+			Multitool_DrawHandles(selectedMultitool^, cameraX, cameraY, scaleData)
 		}
 
 		// Draw Crosshair
@@ -1526,7 +1526,7 @@ main :: proc()
 				DrawPixelV(Vector2{i, mouseY}, crosshairColor)
 			}
 
-			posX : f32 = CandleList_IndexToPixelX(chart.candles[zoomIndex], cursorCandleIndex, scaleData) - cameraPosX
+			posX : f32 = CandleList_IndexToPixelX(chart.candles[zoomIndex], cursorCandleIndex, scaleData) - cameraX
 			candleWidth : f32 = CandleList_IndexToWidth(chart.candles[zoomIndex], cursorCandleIndex, scaleData)
 
 			for i : f32 = 0; i < screenHeight; i += 3
@@ -1537,7 +1537,7 @@ main :: proc()
 
 		// Draw current price line
 		lastCandle := slice.last(chart.candles[zoomIndex].candles[:])
-		priceY := Price_ToPixelY(lastCandle.close, scaleData) - cameraPosY - f32(i32(lastCandle.close < lastCandle.open))
+		priceY := Price_ToPixelY(lastCandle.close, scaleData) - cameraY - f32(i32(lastCandle.close < lastCandle.open))
 		priceColor := candleColors[int(lastCandle.close < lastCandle.open)]
 
 		for i : f32 = 0; i < screenWidth; i += 3
@@ -1558,8 +1558,8 @@ main :: proc()
 	    {
 			fmt.bprintf(textBuffer[:], "%.2f\x00", highestCandle.high)
 			textRect = MeasureTextEx(font, cstring(&textBuffer[0]), FONT_SIZE, 0)
-			labelPosX = f32(CandleList_IndexToPixelX(chart.candles[zoomIndex], highestCandleIndex, scaleData) - cameraPosX) - textRect.x / 2 + candleCenterOffset
-			labelPosY = f32(Price_ToPixelY(highestCandle.high, scaleData) - cameraPosY) - textRect.y - VERTICAL_LABEL_PADDING
+			labelPosX = f32(CandleList_IndexToPixelX(chart.candles[zoomIndex], highestCandleIndex, scaleData) - cameraX) - textRect.x / 2 + candleCenterOffset
+			labelPosY = f32(Price_ToPixelY(highestCandle.high, scaleData) - cameraY) - textRect.y - VERTICAL_LABEL_PADDING
 
 			labelPosX = math.clamp(labelPosX, 2, f32(screenWidth) - textRect.x - 2)
 
@@ -1573,8 +1573,8 @@ main :: proc()
 	    {
 			fmt.bprintf(textBuffer[:], "%.2f\x00", lowestCandle.low)
 			textRect = MeasureTextEx(font, cstring(&textBuffer[0]), FONT_SIZE, 0)
-			labelPosX = f32(CandleList_IndexToPixelX(chart.candles[zoomIndex], lowestCandleIndex, scaleData) - cameraPosX) - textRect.x / 2 + candleCenterOffset
-			labelPosY = f32(Price_ToPixelY(lowestCandle.low, scaleData) - cameraPosY) + VERTICAL_LABEL_PADDING
+			labelPosX = f32(CandleList_IndexToPixelX(chart.candles[zoomIndex], lowestCandleIndex, scaleData) - cameraX) - textRect.x / 2 + candleCenterOffset
+			labelPosY = f32(Price_ToPixelY(lowestCandle.low, scaleData) - cameraY) + VERTICAL_LABEL_PADDING
 
 			labelPosX = math.clamp(labelPosX, 2, f32(screenWidth) - textRect.x - 2)
 
@@ -1591,8 +1591,8 @@ main :: proc()
 			// If last candle is visible
 			if lastCandleIndex == visibleCandlesStartIndex + i32(len(visibleCandles)) - 1
 			{
-				posX := f32(Timestamp_ToPixelX(DayMonthYear_ToTimestamp(chart.dateToDownload), scaleData) - cameraPosX) + 2
-				posY := f32(Price_ToPixelY(chart.candles[zoomIndex].candles[lastCandleIndex].close, scaleData) - cameraPosY) - MeasureTextEx(font, "W\x00", FONT_SIZE, 0).y / 2
+				posX := f32(Timestamp_ToPixelX(DayMonthYear_ToTimestamp(chart.dateToDownload), scaleData) - cameraX) + 2
+				posY := f32(Price_ToPixelY(chart.candles[zoomIndex].candles[lastCandleIndex].close, scaleData) - cameraY) - MeasureTextEx(font, "W\x00", FONT_SIZE, 0).y / 2
 				fmt.bprint(textBuffer[:], "Downloading\x00")
 				DrawTextEx(font, cstring(&textBuffer[0]), {posX, posY}, FONT_SIZE, 0, WHITE)
 			}
@@ -1608,8 +1608,8 @@ main :: proc()
 
 			width := MeasureTextEx(font, cstring(&textBuffer[0]), FONT_SIZE, 0).x + HORIZONTAL_LABEL_PADDING * 2
 
-			posX := f32(CandleList_IndexToPixelX(chart.candles[zoomIndex], cursorCandleIndex, scaleData) - cameraPosX) - width
-			posY := f32(Price_ToPixelY(cursorSnapPrice, scaleData) - cameraPosY) - f32(labelHeight) / 2
+			posX := f32(CandleList_IndexToPixelX(chart.candles[zoomIndex], cursorCandleIndex, scaleData) - cameraX) - width
+			posY := f32(Price_ToPixelY(cursorSnapPrice, scaleData) - cameraY) - f32(labelHeight) / 2
 
 			if posX + HORIZONTAL_LABEL_PADDING < 0
 			{
@@ -1621,7 +1621,7 @@ main :: proc()
 		}
 		else
 		{
-			fmt.bprintf(textBuffer[:], "%.2f\x00", Price_FromPixelY(f32(GetMouseY()) + cameraPosY, scaleData))
+			fmt.bprintf(textBuffer[:], "%.2f\x00", Price_FromPixelY(f32(GetMouseY()) + cameraY, scaleData))
 
 			width := MeasureTextEx(font, cstring(&textBuffer[0]), FONT_SIZE, 0).x + HORIZONTAL_LABEL_PADDING * 2
 
@@ -1648,7 +1648,7 @@ main :: proc()
 		// Draw Price Labels
 		for i in 0 ..< len(priceLabels)
 		{
-			pixelY := Price_ToPixelY(priceLabels[i].price, scaleData) - cameraPosY
+			pixelY := Price_ToPixelY(priceLabels[i].price, scaleData) - cameraY
 
 			labelPosX = f32(screenWidth) - f32(priceLabels[i].width)
 			labelPosY = f32(pixelY) - f32(labelHeight) / 2
@@ -1672,7 +1672,7 @@ main :: proc()
 		// Draw Timestamp Labels
 		for i in 0 ..< len(timestampLabels)
 		{
-			pixelX := Timestamp_ToPixelX(timestampLabels[i].timestamp, scaleData) - cameraPosX
+			pixelX := Timestamp_ToPixelX(timestampLabels[i].timestamp, scaleData) - cameraX
 
 			labelWidth := MeasureTextEx(font, cstring(&timestampLabels[i].textBuffer[0]), FONT_SIZE, 0).x + HORIZONTAL_LABEL_PADDING * 2
 			labelPosX = f32(pixelX) - labelWidth / 2
@@ -1758,7 +1758,7 @@ main :: proc()
 
 			bufferIndex += 3
 
-			pixelX := Timestamp_ToPixelX(cursorTimestamp, scaleData) - cameraPosX
+			pixelX := Timestamp_ToPixelX(cursorTimestamp, scaleData) - cameraX
 
 			labelWidth := MeasureTextEx(font, cstring(&cursorLabelBuffer[0]), FONT_SIZE, 0).x + HORIZONTAL_LABEL_PADDING * 2
 			labelPosX = f32(pixelX) - labelWidth / 2

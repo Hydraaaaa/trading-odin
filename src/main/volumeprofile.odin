@@ -472,7 +472,7 @@ VolumeProfile_Finalize :: proc(profile : ^VolumeProfile)
             startIndex = smallerAreaStartIndex
             newStartIndex = smallerAreaStartIndex
             numBuckets = smallerAreaNumBuckets
-            numBuckets = smallerAreaNumBuckets
+            newNumBuckets = smallerAreaNumBuckets
 
             smallerAreaVolume -= profile.buckets[smallerAreaStartIndex].buyVolume + profile.buckets[smallerAreaStartIndex].sellVolume
             smallerAreaStartIndex += 1
