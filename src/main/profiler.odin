@@ -135,7 +135,7 @@ Profiler_PrintData :: proc(profilerData : ProfilerData)
         profilerData.dataPoints[i].sectionName = string(profilerData.dataPoints[i].sectionNameBuffer[:len(dataPoint.sectionName)])
         fmt.print(profilerData.dataPoints[i].sectionName)
 
-        for i in len(profilerData.dataPoints[i].sectionName) ..< longestTitle + 1
+        for _ in len(profilerData.dataPoints[i].sectionName) ..< longestTitle + 1
         {
             fmt.print(" ")
         }

@@ -137,7 +137,7 @@ VolumeProfile_CreateBuckets :: proc(startTimestamp : i32, endTimestamp : i32, hi
         {
             // Cast a VolumeProfileBucket to [2]f32, and if isBuy is true, its value will be 1, which allows me to index buyVolume instead of sellVolume
             // This line of code is a performant alternative to the commented code below
-            (transmute(^[2]f32)&profile.buckets[int((startTrades[i].price - profile.bottomPrice) / bucketSize)])[int(startTrades[i].isBuy)] += startTrades[i].volume
+            ((^[2]f32)(&profile.buckets[int((startTrades[i].price - profile.bottomPrice) / bucketSize)]))[int(startTrades[i].isBuy)] += startTrades[i].volume
 
             //if startTrades[i].isBuy
             //{
@@ -167,7 +167,7 @@ VolumeProfile_CreateBuckets :: proc(startTimestamp : i32, endTimestamp : i32, hi
             {
                 // Cast a VolumeProfileBucket to [2]f32, and if isBuy is true, its value will be 1, which allows me to index buyVolume instead of sellVolume
                 // This line of code is a performant alternative to the commented code below
-                (transmute(^[2]f32)&profile.buckets[int((endTrades[i].price - profile.bottomPrice) / bucketSize)])[int(endTrades[i].isBuy)] += endTrades[i].volume
+                ((^[2]f32)(&profile.buckets[int((endTrades[i].price - profile.bottomPrice) / bucketSize)]))[int(endTrades[i].isBuy)] += endTrades[i].volume
 
                 //if endTrades[i].isBuy
                 //{

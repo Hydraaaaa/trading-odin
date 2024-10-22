@@ -324,10 +324,6 @@ main :: proc()
 			}
 		}
 
-		hoverCursors := [16]MouseCursor \
-		{
-		}
-
 		cursor : MouseCursor = ---
 		
 		#partial switch(hoveredHandle)
@@ -1019,8 +1015,6 @@ main :: proc()
 		// Generate timestamp labels
 		// Draw lines before candles are drawn
 		// Draw labels after candles are drawn
-		timeRange := cameraEndTimestamp - cameraTimestamp
-
 		pixelTimestampIncrement := Timestamp_FromPixelX(1, scaleData)
 
 		TimestampLabel :: struct
@@ -1333,7 +1327,6 @@ main :: proc()
 				londonLength := Timestamp_ToPixelX(1800 * 16, scaleData)
 				newYorkStart := Timestamp_ToPixelX(startTimestamp + 1800 * 27, scaleData)
 				newYorkLength := Timestamp_ToPixelX(1800 * 13, scaleData)
-				endTimestamp := startTimestamp + 10800
 
 				DrawRectangleRec(Rectangle{asiaStart - cameraX, 0, asiaLength, screenHeight}, asia)
 				DrawRectangleRec(Rectangle{londonStart - cameraX, 0, londonLength, screenHeight}, london)
@@ -1395,13 +1388,10 @@ main :: proc()
 
 			for i in startIndex ..< endIndex
 			{
-				startTimestamp := CandleList_IndexToTimestamp(chart.candles[Timeframe.WEEK], i32(i))
-				endTimestamp := CandleList_IndexToTimestamp(chart.candles[Timeframe.WEEK], i32(i) + 1)
 				if chart.weeklyVolumeProfiles[i].bucketSize == 0
 				{
 					startTimestamp := CandleList_IndexToTimestamp(chart.candles[Timeframe.WEEK], i32(i))
 					endTimestamp := CandleList_IndexToTimestamp(chart.candles[Timeframe.WEEK], i32(i) + 1)
-					weekCandle := chart.candles[Timeframe.WEEK].candles[i]
 					chart.weeklyVolumeProfiles[i] = VolumeProfile_Create(startTimestamp, endTimestamp, chart, 25)
 				}
 
@@ -1429,15 +1419,11 @@ main :: proc()
 
 			for i in startIndex ..< endIndex
 			{
-				startTimestamp := CandleList_IndexToTimestamp(chart.candles[Timeframe.DAY], i32(i))
-				endTimestamp := CandleList_IndexToTimestamp(chart.candles[Timeframe.DAY], i32(i) + 1)
-
 				// bucketSize is 0 if a profile hasn't been loaded yet
 				if chart.dailyVolumeProfiles[i].bucketSize == 0
 				{
 					startTimestamp := CandleList_IndexToTimestamp(chart.candles[Timeframe.DAY], i32(i))
 					endTimestamp := CandleList_IndexToTimestamp(chart.candles[Timeframe.DAY], i32(i) + 1)
-					dayCandle := chart.candles[Timeframe.DAY].candles[i]
 					chart.dailyVolumeProfiles[i] = VolumeProfile_Create(startTimestamp, endTimestamp, chart, 25)
 				}
 
@@ -1476,9 +1462,6 @@ main :: proc()
 				}
 
 				deltaRange := highestDelta - lowestDelta
-
-				highestCandleY := Price_ToPixelY(highestClose, scaleData) - cameraY
-				lowestCandleY := Price_ToPixelY(lowestClose, scaleData) - cameraY
 
 				points : [1000]Vector2 = ---
 
@@ -1586,7 +1569,6 @@ main :: proc()
 		if downloading
 		{
 			lastCandleIndex := i32(len(chart.candles[zoomIndex].candles)) - 1
-			lastCandleTimestamp := CandleList_IndexToTimestamp(chart.candles[zoomIndex], lastCandleIndex)
 
 			// If last candle is visible
 			if lastCandleIndex == visibleCandlesStartIndex + i32(len(visibleCandles)) - 1

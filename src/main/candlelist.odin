@@ -33,8 +33,6 @@ CandleList_TimestampToIndex :: proc(candleList : CandleList, timestamp : i32) ->
 {
 	timeframeIncrements := CANDLE_TIMEFRAME_INCREMENTS
 
-	lastCandleIndex := i32(len(candleList.candles)) - 1
-
 	if candleList.timeframe == .MONTH
 	{
 		monthlyIncrements := MONTHLY_INCREMENTS
@@ -84,9 +82,7 @@ CandleList_IndexToTimestamp :: proc(candleList : CandleList, index : i32) -> i32
 	{
 		monthlyIncrements := MONTHLY_INCREMENTS
 
-		offsetIndex := candleList.offset / FOUR_YEARS
 		offsetRemainderTimestamp := candleList.offset % FOUR_YEARS
-
 		offsetRemainderIndex : i32 = 47
 
 		for offsetRemainderTimestamp < monthlyIncrements[offsetRemainderIndex]

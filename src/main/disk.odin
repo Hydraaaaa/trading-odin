@@ -537,8 +537,6 @@ LoadHourVolumeProfiles :: proc() -> VolumeProfilePool
 
 	headerCount := transmute(i32)countBuffer
 
-	readIndex : i64 = 0
-
 	profilePool : VolumeProfilePool
 	profilePool.bucketSize = HOUR_BUCKET_SIZE
 

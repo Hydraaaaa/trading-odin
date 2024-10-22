@@ -59,8 +59,7 @@ GenerateMinuteCandles :: proc()
 
 GenerateMinuteDelta :: proc()
 {
-    bytes, ok := os.read_entire_file_from_filename(TRADES_FILE)
-    defer delete(bytes)
+    bytes, ok := os.read_entire_file_from_filename(TRADES_FILE); defer delete(bytes)
 
     trades := slice.reinterpret([]Trade, bytes[size_of(DayMonthYear):])
 
