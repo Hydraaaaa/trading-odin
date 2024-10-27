@@ -558,7 +558,7 @@ VolumeProfile_Draw :: proc(profile : VolumeProfile, \
             bucketEndPixel := VolumeProfile_BucketToPixelY(profile, bucketIndex + 1, scaleData, true) - cameraPosY
 
             // If there are multiple buckets within one pixel, only draw the biggest
-            for bucketStartPixel == bucketEndPixel &&
+            for bucketStartPixel - bucketEndPixel < 1 &&
                 bucketIndex < endIndex - 1
             {
                 bucketIndex += 1
