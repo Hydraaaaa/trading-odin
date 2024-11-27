@@ -20,7 +20,6 @@ HalfHourOfWeek_BoxPlot :: struct
     lowestValue : f32,
     labelIncrement : f32,
     labelFormat : string,
-    title : string,
 }
 
 HalfHourOfWeek_HighLow :: struct
@@ -74,7 +73,7 @@ DataList :: struct
 // Difference between open and close of each half hour candle in the week
 HalfHourOfWeek_PriceMovement :: proc{HalfHourOfWeek_PriceMovement_Existing, HalfHourOfWeek_PriceMovement_New}
 
-// Function does NOT support abs changing from previous value
+// Function does NOT support abs or percent changing from previous value
 HalfHourOfWeek_PriceMovement_Existing :: proc(chart : Chart, startTimestamp : i32, endTimestamp : i32, existingPlot : HalfHourOfWeek_BoxPlot, abs : bool = false, percent : bool = false) -> HalfHourOfWeek_BoxPlot
 {
     // TODO: This doesn't factor in if the region shrinks
@@ -152,28 +151,27 @@ HalfHourOfWeek_PriceMovement_Existing :: proc(chart : Chart, startTimestamp : i3
 
 HalfHourOfWeek_PriceMovement_New :: proc(chart : Chart, startTimestamp : i32, endTimestamp : i32, abs : bool = false, percent : bool = false) -> HalfHourOfWeek_BoxPlot
 {
-    week : HalfHourOfWeek_BoxPlot
+    plot : HalfHourOfWeek_BoxPlot
     
-    week.data = HalfHourOfWeek_PriceMovement_Data(chart, startTimestamp, endTimestamp, abs, percent)
+    plot.data = HalfHourOfWeek_PriceMovement_Data(chart, startTimestamp, endTimestamp, abs, percent)
 
-    if abs
+    plot.startTimestamp = startTimestamp
+    plot.endTimestamp = endTimestamp
+
+    CalculateDatapoints(&plot)
+
+    if percent
     {
-        week.title = "Price Movement (abs)\x00"
+        plot.labelIncrement = 0.005
+        plot.labelFormat = "%.3f\x00"
     }
     else
     {
-        week.title = "Price Movement\x00"
+        plot.labelIncrement = 250
+        plot.labelFormat = "%.0f\x00"
     }
 
-    week.startTimestamp = startTimestamp
-    week.endTimestamp = endTimestamp
-
-    CalculateDatapoints(&week)
-
-    week.labelIncrement = 250
-    week.labelFormat = "%.0f\x00"
-
-    return week
+    return plot
 }
 
 @(private="file")
@@ -553,11 +551,11 @@ HalfHourOfWeek_BoxPlot_Draw :: proc(plot : HalfHourOfWeek_BoxPlot, posX : i32, p
         labelCount /= 2
     }
     
-    labelValue := plot.lowestValue - math.mod(plot.lowestValue, plot.labelIncrement)
+    labelValue := plot.lowestValue - math.mod(plot.lowestValue, labelIncrement)
 
     if labelValue < plot.lowestValue
     {
-        labelValue += plot.labelIncrement
+        labelValue += labelIncrement
     }
 
     // Draw labels

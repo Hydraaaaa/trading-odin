@@ -284,7 +284,7 @@ Viewport_Draw_Sidebar :: proc(vp : ^Viewport, chart : Chart)
 	
 	PADDING :: 8
 	
-	rl.DrawRectangleRec(rl.Rectangle{vp.rect.x, vp.rect.y, SIDEBAR_WIDTH, vp.rect.height}, rl.Color{0, 0, 0, 159})
+	rl.DrawRectangleRec(rl.Rectangle{vp.rect.x, vp.rect.y, SIDEBAR_WIDTH, vp.rect.height}, rl.Color{0, 0, 0, 191})
 	rl.DrawRectangleRec(rl.Rectangle{vp.rect.x + SIDEBAR_WIDTH, vp.rect.y, 1, vp.rect.height}, rl.Color{255, 255, 255, 63})
 	
 	currentY : f32 = PADDING
@@ -345,7 +345,7 @@ Viewport_Draw_Sidebar :: proc(vp : ^Viewport, chart : Chart)
 			currentY += LABEL_FONT_SIZE
 			
 			HalfHourOfWeek_BoxPlot_Draw(boxPlot, PADDING, i32(currentY + 1), SIDEBAR_WIDTH - PADDING * 2, 1, GRAPH_HEIGHT)
-			currentY += GRAPH_HEIGHT
+			currentY += GRAPH_HEIGHT + 4
 			
 			return currentY
 		}
