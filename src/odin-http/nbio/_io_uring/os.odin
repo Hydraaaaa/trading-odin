@@ -1,4 +1,4 @@
-//+build linux
+#+build linux
 package io_uring
 
 import "core:math"
@@ -63,25 +63,25 @@ io_uring_init :: proc(ring: ^IO_Uring, entries: u32, params: ^io_uring_params) -
 
 	res := sys_io_uring_setup(entries, params)
 	if res < 0 {
-		switch os.Errno(-res) {
-		case os.EFAULT:
+		#partial switch os.Platform_Error(-res) {
+		case .EFAULT:
 			return .Params_Outside_Accessible_Address_Space
 		// The resv array contains non-zero data, p.flags contains an unsupported flag,
 		// entries out of bounds, IORING_SETUP_SQ_AFF was specified without IORING_SETUP_SQPOLL,
 		// or IORING_SETUP_CQSIZE was specified but linux.io_uring_params.cq_entries was invalid:
-		case os.EINVAL:
+		case .EINVAL:
 			return .Arguments_Invalid
-		case os.EMFILE:
+		case .EMFILE:
 			return .Process_Fd_Quota_Exceeded
-		case os.ENFILE:
+		case .ENFILE:
 			return .System_Fd_Quota_Exceeded
-		case os.ENOMEM:
+		case .ENOMEM:
 			return .System_Resources
 		// IORING_SETUP_SQPOLL was specified but effective user ID lacks sufficient privileges,
 		// or a container seccomp policy prohibits io_uring syscalls:
-		case os.EPERM:
+		case .EPERM:
 			return .Permission_Denied
-		case os.ENOSYS:
+		case .ENOSYS:
 			return .System_Outdated
 		case:
 			return .Unexpected
@@ -177,32 +177,32 @@ enter :: proc(
 	assert(ring.fd >= 0)
 	ns := sys_io_uring_enter(u32(ring.fd), n_to_submit, min_complete, flags, nil)
 	if ns < 0 {
-		switch os.Errno(-ns) {
-		case os.ERROR_NONE:
+		#partial switch os.Platform_Error(-ns) {
+		case .NONE:
 			err = .None
-		case os.EAGAIN:
+		case .EAGAIN:
 			// The kernel was unable to allocate memory or ran out of resources for the request. (try again)
 			err = .System_Resources
-		case os.EBADF:
+		case .EBADF:
 			// The SQE `fd` is invalid, or `IOSQE_FIXED_FILE` was set but no files were registered
 			err = .File_Descriptor_Invalid
 		// case os.EBUSY: // TODO: why is this not in os_linux
 		// 	// Attempted to overcommit the number of requests it can have pending. Should wait for some completions and try again.
 		// 	err = .Completion_Queue_Overcommitted
-		case os.EINVAL:
+		case .EINVAL:
 			// The SQE is invalid, or valid but the ring was setup with `IORING_SETUP_IOPOLL`
 			err = .Submission_Queue_Entry_Invalid
-		case os.EFAULT:
+		case .EFAULT:
 			// The buffer is outside the process' accessible address space, or `IORING_OP_READ_FIXED`
 			// or `IORING_OP_WRITE_FIXED` was specified but no buffers were registered, or the range
 			// described by `addr` and `len` is not within the buffer registered at `buf_index`
 			err = .Buffer_Invalid
-		case os.ENXIO:
+		case .ENXIO:
 			err = .Ring_Shutting_Down
-		case os.EOPNOTSUPP:
+		case .EOPNOTSUPP:
 			// The kernel believes the `fd` doesn't refer to an `io_uring`, or the opcode isn't supported by this kernel (more likely)
 			err = .Opcode_Not_Supported
-		case os.EINTR:
+		case .EINTR:
 			// The op was interrupted by a delivery of a signal before it could complete.This can happen while waiting for events with `IORING_ENTER_GETEVENTS`
 			err = .Signal_Interrupt
 		case:
@@ -485,7 +485,7 @@ openat :: proc(
 	sqe.opcode = IORING_OP.OPENAT
 	sqe.fd = i32(fd)
 	sqe.addr = cast(u64)transmute(uintptr)path
-	sqe.len = cast(u32)mode
+	sqe.len = mode
 	sqe.rw_flags = i32(flags)
 	sqe.user_data = user_data
 	return
@@ -517,7 +517,7 @@ close :: proc(ring: ^IO_Uring, user_data: u64, fd: os.Handle) -> (sqe: ^io_uring
 timeout :: proc(
 	ring: ^IO_Uring,
 	user_data: u64,
-	ts: ^unix.timespec,
+	ts: ^linux.Time_Spec,
 	count: u32,
 	flags: u32,
 ) -> (
@@ -527,7 +527,7 @@ timeout :: proc(
 	sqe = get_sqe(ring) or_return
 	sqe.opcode = IORING_OP.TIMEOUT
 	sqe.fd = -1
-	sqe.addr = transmute(u64)uintptr(ts)
+	sqe.addr = cast(u64)uintptr(ts)
 	sqe.len = 1
 	sqe.off = u64(count)
 	sqe.rw_flags = i32(flags)
@@ -589,7 +589,7 @@ link_timeout :: proc(
 	sqe = get_sqe(ring) or_return
 	sqe.opcode = IORING_OP.LINK_TIMEOUT
 	sqe.fd = -1
-	sqe.addr = transmute(u64)uintptr(ts)
+	sqe.addr = cast(u64)uintptr(ts)
 	sqe.len = 1
 	sqe.rw_flags = i32(flags)
 	sqe.user_data = user_data
@@ -686,16 +686,16 @@ submission_queue_make :: proc(fd: os.Handle, params: ^io_uring_params) -> (sq: S
 	)
 	if mmap_sqes_result < 0 do return
 
-	array := transmute([^]u32)&mmap[params.sq_off.array]
-	sqes := transmute([^]io_uring_sqe)uintptr(mmap_sqes_result)
-	mmap_sqes := transmute([^]u8)uintptr(mmap_sqes_result)
+	array := cast([^]u32)&mmap[params.sq_off.array]
+	sqes := cast([^]io_uring_sqe)uintptr(mmap_sqes_result)
+	mmap_sqes := cast([^]u8)uintptr(mmap_sqes_result)
 
 
-	sq.head = transmute(^u32)&mmap[params.sq_off.head]
-	sq.tail = transmute(^u32)&mmap[params.sq_off.tail]
-	sq.mask = (transmute(^u32)&mmap[params.sq_off.ring_mask])^
-	sq.flags = transmute(^u32)&mmap[params.sq_off.flags]
-	sq.dropped = transmute(^u32)&mmap[params.sq_off.dropped]
+	sq.head = cast(^u32)&mmap[params.sq_off.head]
+	sq.tail = cast(^u32)&mmap[params.sq_off.tail]
+	sq.mask = (cast(^u32)&mmap[params.sq_off.ring_mask])^
+	sq.flags = cast(^u32)&mmap[params.sq_off.flags]
+	sq.dropped = cast(^u32)&mmap[params.sq_off.dropped]
 	sq.array = array[:params.sq_entries]
 	sq.sqes = sqes[:params.sq_entries]
 	sq.mmap = mmap[:size]
@@ -724,14 +724,14 @@ completion_queue_make :: proc(fd: os.Handle, params: ^io_uring_params, sq: ^Subm
 	assert((params.features & IORING_FEAT_SINGLE_MMAP) != 0)
 
 	mmap := sq.mmap
-	cqes := transmute([^]io_uring_cqe)&mmap[params.cq_off.cqes]
+	cqes := cast([^]io_uring_cqe)&mmap[params.cq_off.cqes]
 
 	return(
 		{
-			head = transmute(^u32)&mmap[params.cq_off.head],
-			tail = transmute(^u32)&mmap[params.cq_off.tail],
-			mask = (transmute(^u32)&mmap[params.cq_off.ring_mask])^,
-			overflow = transmute(^u32)&mmap[params.cq_off.overflow],
+			head = cast(^u32)&mmap[params.cq_off.head],
+			tail = cast(^u32)&mmap[params.cq_off.tail],
+			mask = (cast(^u32)&mmap[params.cq_off.ring_mask])^,
+			overflow = cast(^u32)&mmap[params.cq_off.overflow],
 			cqes = cqes[:params.cq_entries],
 		} \
 	)

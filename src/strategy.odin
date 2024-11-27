@@ -1,0 +1,5 @@
+package main
+
+BYBIT_MARKET_FEE :: 0.00075
+BYBIT_LIMIT_FEE :: -0.00025
+

@@ -1,4 +1,4 @@
-//+private
+#+private
 package nbio
 
 import "base:runtime"
@@ -108,7 +108,7 @@ Op_Poll_Remove :: struct {
 flush :: proc(io: ^IO) -> os.Errno {
 	events: [MAX_EVENTS]kqueue.KEvent
 
-	_ = flush_timeouts(io)
+	min_timeout := flush_timeouts(io)
 	change_events := flush_io(io, events[:])
 
 	if (change_events > 0 || queue.len(io.completed) == 0) {
@@ -116,7 +116,9 @@ flush :: proc(io: ^IO) -> os.Errno {
 			return os.ERROR_NONE
 		}
 
+		max_timeout := time.Millisecond * 10
 		ts: kqueue.Time_Spec
+		ts.nsec = min(min_timeout.? or_else i64(max_timeout), i64(max_timeout))
 		new_events, err := kqueue.kevent(io.kq, events[:change_events], events[:], &ts)
 		if err != .None do return ev_err_to_os_err(err)
 
@@ -303,7 +305,7 @@ do_connect :: proc(io: ^IO, completion: ^Completion, op: ^Op_Connect) {
 
 	if err != os.ERROR_NONE {
 		net.close(op.socket)
-		op.callback(completion.user_data, {}, net.Dial_Error(err))
+		op.callback(completion.user_data, {}, net.Dial_Error(err.(os.Platform_Error)))
 	} else {
 		op.callback(completion.user_data, op.socket, nil)
 	}
@@ -398,12 +400,16 @@ do_send :: proc(io: ^IO, completion: ^Completion, op: ^Op_Send) {
 	switch sock in op.socket {
 	case net.TCP_Socket:
 		sent, errno = os.send(os.Socket(sock), op.buf, 0)
-		err = net.TCP_Send_Error(errno)
+		if errno != nil {
+			err = net.TCP_Send_Error(errno.(os.Platform_Error))
+		}
 
 	case net.UDP_Socket:
 		toaddr := _endpoint_to_sockaddr(op.endpoint.(net.Endpoint))
 		sent, errno = os.sendto(os.Socket(sock), op.buf, 0, cast(^os.SOCKADDR)&toaddr, i32(toaddr.len))
-		err = net.UDP_Send_Error(errno)
+		if errno != nil {
+			err = net.UDP_Send_Error(errno.(os.Platform_Error))
+		}
 	}
 
 	op.sent += int(sent)
