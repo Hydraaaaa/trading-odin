@@ -567,7 +567,7 @@ HalfHourOfWeek_BoxPlot_Draw :: proc(plot : HalfHourOfWeek_BoxPlot, posX : i32, p
         fmt.bprintf(textBuffer[:], plot.labelFormat, labelValue)
         
         labelWidth := rl.MeasureTextEx(labelFont, cstring(&textBuffer[0]), LABEL_FONT_SIZE, 0).x
-        rl.DrawTextEx(labelFont, cstring(&textBuffer[0]), rl.Vector2{f32(boxPlotStartX) - labelWidth - 5, f32(posY + height - labelHeight)}, LABEL_FONT_SIZE, 0, rl.WHITE)
+        rl.DrawTextEx(labelFont, cstring(&textBuffer[0]), rl.Vector2{f32(boxPlotStartX) - labelWidth - 5, f32(posY + height - labelHeight - LABEL_FONT_SIZE / 2)}, LABEL_FONT_SIZE, 0, rl.WHITE)
         
         labelValue += labelIncrement
     }
