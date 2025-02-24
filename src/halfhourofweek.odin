@@ -70,11 +70,8 @@ DataList :: struct
 //     return week
 // }
 
-// Difference between open and close of each half hour candle in the week
-HalfHourOfWeek_PriceMovement :: proc{HalfHourOfWeek_PriceMovement_Existing, HalfHourOfWeek_PriceMovement_New}
-
 // Function does NOT support abs or percent changing from previous value
-HalfHourOfWeek_PriceMovement_Existing :: proc(chart : Chart, startTimestamp : i32, endTimestamp : i32, existingPlot : HalfHourOfWeek_BoxPlot, abs : bool = false, percent : bool = false) -> HalfHourOfWeek_BoxPlot
+HalfHourOfWeek_PriceMovement_Resize :: proc(chart : Chart, startTimestamp : i32, endTimestamp : i32, existingPlot : HalfHourOfWeek_BoxPlot, abs : bool = false, percent : bool = false) -> HalfHourOfWeek_BoxPlot
 {
     // TODO: This doesn't factor in if the region shrinks
     prependedData : [336]DataList
@@ -149,7 +146,7 @@ HalfHourOfWeek_PriceMovement_Existing :: proc(chart : Chart, startTimestamp : i3
     return newPlot
 }
 
-HalfHourOfWeek_PriceMovement_New :: proc(chart : Chart, startTimestamp : i32, endTimestamp : i32, abs : bool = false, percent : bool = false) -> HalfHourOfWeek_BoxPlot
+HalfHourOfWeek_PriceMovement_Create :: proc(chart : Chart, startTimestamp : i32, endTimestamp : i32, abs : bool = false, percent : bool = false) -> HalfHourOfWeek_BoxPlot
 {
     plot : HalfHourOfWeek_BoxPlot
     

@@ -468,10 +468,10 @@ Selection_Create :: proc(selection : ^Selection, chart : Chart, startTimestamp :
 
 	selection.draw618 = true
 
-	selection.priceMovement = HalfHourOfWeek_PriceMovement(chart, startTimestamp, endTimestamp)
-	selection.priceMovementAbs = HalfHourOfWeek_PriceMovement(chart, startTimestamp, endTimestamp, true)
-	selection.priceMovementPercent = HalfHourOfWeek_PriceMovement(chart, startTimestamp, endTimestamp, false, true)
-	selection.priceMovementPercentAbs = HalfHourOfWeek_PriceMovement(chart, startTimestamp, endTimestamp, true, true)
+	selection.priceMovement = HalfHourOfWeek_PriceMovement_Create(chart, startTimestamp, endTimestamp)
+	selection.priceMovementAbs = HalfHourOfWeek_PriceMovement_Create(chart, startTimestamp, endTimestamp, true)
+	selection.priceMovementPercent = HalfHourOfWeek_PriceMovement_Create(chart, startTimestamp, endTimestamp, false, true)
+	selection.priceMovementPercentAbs = HalfHourOfWeek_PriceMovement_Create(chart, startTimestamp, endTimestamp, true, true)
 }
 
 Selection_Resize :: proc(selection : ^Selection, startTimestamp : i32, endTimestamp : i32, high : f32, low : f32, isUpsideDown : bool, chart : Chart)
@@ -484,10 +484,10 @@ Selection_Resize :: proc(selection : ^Selection, startTimestamp : i32, endTimest
 	selection.low = low
 	selection.isUpsideDown = isUpsideDown
 	
-	selection.priceMovement = HalfHourOfWeek_PriceMovement(chart, startTimestamp, endTimestamp)
-	selection.priceMovementAbs = HalfHourOfWeek_PriceMovement(chart, startTimestamp, endTimestamp, true)
-	selection.priceMovementPercent = HalfHourOfWeek_PriceMovement(chart, startTimestamp, endTimestamp, false, true)
-	selection.priceMovementPercentAbs = HalfHourOfWeek_PriceMovement(chart, startTimestamp, endTimestamp, true, true)
+	selection.priceMovement = HalfHourOfWeek_PriceMovement_Create(chart, startTimestamp, endTimestamp)
+	selection.priceMovementAbs = HalfHourOfWeek_PriceMovement_Create(chart, startTimestamp, endTimestamp, true)
+	selection.priceMovementPercent = HalfHourOfWeek_PriceMovement_Create(chart, startTimestamp, endTimestamp, false, true)
+	selection.priceMovementPercentAbs = HalfHourOfWeek_PriceMovement_Create(chart, startTimestamp, endTimestamp, true, true)
 }
 
 Selection_Draw :: proc(selection : Selection, cameraX : f32, cameraY : f32, scaleData : ScaleData)
