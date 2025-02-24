@@ -90,9 +90,12 @@ Viewport :: struct
 	highlows05 : [dynamic]HighLow,
 	startsHigh05 : bool,
 	fibResults05 : FibResults,
-	
-	highlowsChris : [dynamic]HighLow,
-	startsHighChris : bool,
+
+	// Sidebar Textures
+	priceMovementTexture : rl.Texture,
+	priceMovementAbsTexture : rl.Texture,
+	priceMovementPercentTexture : rl.Texture,
+	priceMovementPercentAbsTexture : rl.Texture,
 	
 	flags : ViewportFlagsSet,
 }
@@ -156,8 +159,6 @@ Viewport_Init :: proc(vp : ^Viewport, chart : Chart, rect : rl.Rectangle)
 	vp.fibResults02 = CalcFibs(chart, vp.highlows02[:], vp.startsHigh02)
 	vp.highlows05, vp.startsHigh05 = HighLow_Generate(chart.candles[Timeframe.MINUTE], 0.05)
 	vp.fibResults05 = CalcFibs(chart, vp.highlows05[:], vp.startsHigh05)
-	
-	vp.highlowsChris, vp.startsHighChris = HighLow_Generate(chart.candles[Timeframe.HOUR], 0.5)
 }
 
 Viewport_Destroy :: proc(vp : Viewport)
@@ -333,6 +334,7 @@ Viewport_Update :: proc(vp : ^Viewport, chart : Chart)
 			                 vp.cursorCandleIndex), \
 			                 vp.cursorSnapPrice, \
 			                 vp.cursorSnapPrice)
+			Viewport_UpdateSidebarTextures(vp)
 		}
 	}
 
@@ -461,6 +463,7 @@ Viewport_Update :: proc(vp : ^Viewport, chart : Chart)
 				low := math.min(vp.mouseSelectionStartPrice, vp.cursorSnapPrice)
 
 				Selection_Resize(vp.currentSelection, newStartTimestamp, newEndTimestamp, high, low, isUpsideDown, chart)
+				Viewport_UpdateSidebarTextures(vp)
 			}
 			case .EDGE_LEFT, .EDGE_RIGHT:
 			{
@@ -493,6 +496,7 @@ Viewport_Update :: proc(vp : ^Viewport, chart : Chart)
 
 
 				Selection_Resize(vp.currentSelection, newStartTimestamp, newEndTimestamp, vp.currentSelection.high, vp.currentSelection.low, vp.currentSelection.isUpsideDown, chart)
+				Viewport_UpdateSidebarTextures(vp)
 			}
 			case .EDGE_TOP, .EDGE_BOTTOM:
 			{
@@ -516,6 +520,7 @@ Viewport_Update :: proc(vp : ^Viewport, chart : Chart)
 				low := math.min(vp.mouseSelectionStartPrice, vp.cursorSnapPrice)
 
 				Selection_Resize(vp.currentSelection, vp.currentSelection.startTimestamp, vp.currentSelection.endTimestamp, high, low, isUpsideDown, chart)
+				Viewport_UpdateSidebarTextures(vp)
 			}
 			case:
 			{
@@ -1129,10 +1134,10 @@ Viewport_Draw :: proc(vp : ^Viewport, chart : Chart)
 	}
 
 	// Draw Highs/Lows
-	prevHighlow := vp.highlowsChris[0]
-	prevPosX := Timestamp_ToPixelX(vp.highlowsChris[0].timestamp, vp.scaleData)
+	prevHighlow := vp.highlows005[0]
+	prevPosX := Timestamp_ToPixelX(vp.highlows005[0].timestamp, vp.scaleData)
 
-	for highlow in vp.highlowsChris[1:]
+	for highlow in vp.highlows005[1:]
 	{
 		posX := Timestamp_ToPixelX(highlow.timestamp, vp.scaleData)
 		
@@ -1422,5 +1427,108 @@ Viewport_UpdateTimeframe :: proc(vp : ^Viewport, chart : Chart)
 		{
 			vp.zoomIndex -= Timeframe(1)
 		}
+	}
+}
+
+Viewport_UpdateSidebarTextures :: proc(vp : ^Viewport)
+{
+	GRAPH_HEIGHT :: 102
+	COLUMN_WIDTH :: 1
+
+	if rl.IsTextureValid(vp.priceMovementTexture)
+	{
+		rl.UnloadTexture(vp.priceMovementTexture)
+		rl.UnloadTexture(vp.priceMovementAbsTexture)
+		rl.UnloadTexture(vp.priceMovementPercentTexture)
+		rl.UnloadTexture(vp.priceMovementPercentAbsTexture)
+	}
+	
+	vp.priceMovementTexture = CreateTexture(vp.currentSelection.priceMovement, COLUMN_WIDTH, GRAPH_HEIGHT)
+	vp.priceMovementAbsTexture = CreateTexture(vp.currentSelection.priceMovementAbs, COLUMN_WIDTH, GRAPH_HEIGHT)
+	vp.priceMovementPercentTexture = CreateTexture(vp.currentSelection.priceMovementPercent, COLUMN_WIDTH, GRAPH_HEIGHT)
+	vp.priceMovementPercentAbsTexture = CreateTexture(vp.currentSelection.priceMovementPercentAbs, COLUMN_WIDTH, GRAPH_HEIGHT)
+	
+	CreateTexture :: proc(plot : HalfHourOfWeek_BoxPlot, columnWidth : i32, height : i32) -> rl.Texture
+	{
+		image := rl.GenImageColor(columnWidth * 336 + 2, height, rl.Color{0, 0, 0, 0})
+
+	    boxPlotStartX : i32 = PLOT_BORDER_THICKNESS
+	    boxPlotHeight : i32 = height - PLOT_BORDER_THICKNESS * 2
+
+	    asiaColor := rl.RED
+	    asiaColor.a = 63
+	    londonColor := rl.YELLOW
+	    londonColor.a = 63
+	    newYorkColor := rl.BLUE
+	    newYorkColor.a = 63
+    
+	    asiaStart := boxPlotStartX
+	    londonStart := boxPlotStartX + columnWidth * 16
+	    newYorkStart := boxPlotStartX + columnWidth * 27
+
+	    asiaLength := columnWidth * 16
+	    londonLength := columnWidth * 17
+	    newYorkLength := columnWidth * 13
+
+	    range := plot.highestValue - plot.lowestValue
+
+	    // Adjust label increment to avoid labels overlapping
+	    labelIncrement := plot.labelIncrement
+	    labelCount := i32(range / labelIncrement)
+    
+	    for labelCount * LABEL_FONT_SIZE > height
+	    {
+	        labelIncrement *= 2
+	        labelCount /= 2
+	    }
+    
+	    labelValue := plot.lowestValue - math.mod(plot.lowestValue, labelIncrement)
+
+	    if labelValue < plot.lowestValue
+	    {
+	        labelValue += labelIncrement
+	    }
+
+	    // Draw border
+		rl.ImageDrawRectangleLines(&image, {0, 0, f32(columnWidth * 336 + 2), f32(height)}, PLOT_BORDER_THICKNESS, rl.Color{255, 255, 255, 127})
+
+		// Draw sessions + bars
+	    for day in 0 ..< 7
+	    {
+	        rl.ImageDrawRectangle(&image, asiaStart, PLOT_BORDER_THICKNESS, asiaLength, i32(boxPlotHeight), asiaColor)
+	        rl.ImageDrawRectangle(&image, londonStart, PLOT_BORDER_THICKNESS, londonLength, i32(boxPlotHeight), londonColor)
+	        rl.ImageDrawRectangle(&image, newYorkStart, PLOT_BORDER_THICKNESS, newYorkLength, i32(boxPlotHeight), newYorkColor)
+
+	        // Separating rectangle draw from line draws due to performance effects
+	        for data, i in plot.data
+	        {
+	            Q3Y := PLOT_BORDER_THICKNESS + i32((1 - ((data.Q3 - plot.lowestValue) / range)) * f32(boxPlotHeight))
+	            Q1Y := PLOT_BORDER_THICKNESS + i32((1 - ((data.Q1 - plot.lowestValue) / range)) * f32(boxPlotHeight))
+
+	            columnPosX := boxPlotStartX + i32(i) * columnWidth
+
+	            rl.ImageDrawRectangle(&image, columnPosX, Q3Y, columnWidth, Q1Y - Q3Y, rl.WHITE)
+	        }
+        
+	        for data, i in plot.data
+	        {
+	            medianY := PLOT_BORDER_THICKNESS + i32((1 - ((data.median - plot.lowestValue) / range)) * f32(boxPlotHeight))
+	            meanY := PLOT_BORDER_THICKNESS + i32((1 - ((data.mean - plot.lowestValue) / range)) * f32(boxPlotHeight))
+
+	            columnPosX := boxPlotStartX + i32(i) * columnWidth
+
+	            rl.ImageDrawLine(&image, columnPosX, medianY, columnPosX + columnWidth, medianY, rl.BLUE)
+	            rl.ImageDrawLine(&image, columnPosX, meanY, columnPosX + columnWidth, meanY, rl.RED)
+	        }
+        
+	        asiaStart += columnWidth * 48
+	        londonStart += columnWidth * 48
+	        newYorkStart += columnWidth * 48
+		}
+
+		texture := rl.LoadTextureFromImage(image)
+		rl.UnloadImage(image)
+
+		return texture
 	}
 }

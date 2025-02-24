@@ -5,6 +5,8 @@ import "core:math"
 import "core:mem"
 import rl "vendor:raylib"
 
+PLOT_BORDER_THICKNESS :: 1
+
 Viewport_Draw_DayOfWeek :: proc(vp : ^Viewport, chart : Chart)
 {
 	if vp.zoomIndex > .DAY do return
@@ -336,24 +338,64 @@ Viewport_Draw_Sidebar :: proc(vp : ^Viewport, chart : Chart)
 		rl.DrawTextEx(headerFont, "Selection Stats", rl.Vector2{PADDING, currentY}, HEADER_FONT_SIZE, 0, rl.WHITE); currentY += HEADER_FONT_SIZE
 
 		// Returns new currentY
-		DrawBoxPlot :: proc(currentY : f32, label : cstring, boxPlot : HalfHourOfWeek_BoxPlot) -> f32
+		DrawBoxPlot :: proc(currentY : f32, label : cstring, plot : HalfHourOfWeek_BoxPlot, texture : rl.Texture) -> f32
 		{
-			GRAPH_HEIGHT :: 102
-		
+			COLUMN_WIDTH :: 1
+			PLOT_HEIGHT :: 102
+			BORDER_WIDTH :: 1
+			
 			currentY := currentY
 			rl.DrawTextEx(labelFont, label, rl.Vector2{PADDING, currentY}, LABEL_FONT_SIZE, 0, rl.WHITE)
 			currentY += LABEL_FONT_SIZE
 			
-			HalfHourOfWeek_BoxPlot_Draw(boxPlot, PADDING, i32(currentY + 1), SIDEBAR_WIDTH - PADDING * 2, 1, GRAPH_HEIGHT)
-			currentY += GRAPH_HEIGHT + 4
+		    plotStartX : i32 = SIDEBAR_WIDTH - PADDING - PLOT_BORDER_THICKNESS * 2 - COLUMN_WIDTH * 336
+		    plotHeight : i32 = PLOT_HEIGHT - 2
+
+		    range := plot.highestValue - plot.lowestValue
+
+		    // Adjust label increment to avoid labels overlapping
+		    labelIncrement := plot.labelIncrement
+		    labelCount := i32(range / labelIncrement)
+    
+		    for labelCount * LABEL_FONT_SIZE > PLOT_HEIGHT
+		    {
+		        labelIncrement *= 2
+		        labelCount /= 2
+		    }
+    
+		    labelValue := plot.lowestValue - math.mod(plot.lowestValue, labelIncrement)
+
+		    if labelValue < plot.lowestValue
+		    {
+		        labelValue += labelIncrement
+		    }
+
+		    // Draw labels
+		    textBuffer : [64]u8
+    
+		    for labelValue < plot.highestValue
+		    {
+		        labelHeight := i32((labelValue - plot.lowestValue) / range * PLOT_HEIGHT)
+		        fmt.bprintf(textBuffer[:], plot.labelFormat, labelValue)
+        
+		        labelWidth := rl.MeasureTextEx(labelFont, cstring(&textBuffer[0]), LABEL_FONT_SIZE, 0).x
+		        rl.DrawTextEx(labelFont, cstring(&textBuffer[0]), rl.Vector2{f32(plotStartX) - labelWidth - 5, currentY + 1 + f32(PLOT_HEIGHT - labelHeight - LABEL_FONT_SIZE / 2)}, LABEL_FONT_SIZE, 0, rl.WHITE)
+        
+		        labelValue += labelIncrement
+		    }
+
+			rl.DrawTexture(texture, plotStartX, i32(currentY + 1), rl.Color{255, 255, 255, 255})
+			
+			//HalfHourOfWeek_BoxPlot_Draw(plot, PADDING, i32(currentY + 1), SIDEBAR_WIDTH - PADDING * 2, 1, PLOT_HEIGHT)
+			currentY += PLOT_HEIGHT + 4
 			
 			return currentY
 		}
 
-		currentY = DrawBoxPlot(currentY, "Price Movement", vp.currentSelection.priceMovement)
-		currentY = DrawBoxPlot(currentY, "Price Movement (abs)", vp.currentSelection.priceMovementAbs)
-		currentY = DrawBoxPlot(currentY, "Price Movement (percent)", vp.currentSelection.priceMovementPercent)
-		currentY = DrawBoxPlot(currentY, "Price Movement (percent+abs)", vp.currentSelection.priceMovementPercentAbs)
+		currentY = DrawBoxPlot(currentY, "Price Movement", vp.currentSelection.priceMovement, vp.priceMovementTexture)
+		currentY = DrawBoxPlot(currentY, "Price Movement (abs)", vp.currentSelection.priceMovementAbs, vp.priceMovementAbsTexture)
+		currentY = DrawBoxPlot(currentY, "Price Movement (percent)", vp.currentSelection.priceMovementPercent, vp.priceMovementPercentTexture)
+		currentY = DrawBoxPlot(currentY, "Price Movement (percent+abs)", vp.currentSelection.priceMovementPercentAbs, vp.priceMovementPercentAbsTexture)
 	}
 
 }
