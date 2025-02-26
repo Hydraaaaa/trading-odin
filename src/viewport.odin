@@ -1472,23 +1472,6 @@ Viewport_UpdateSidebarTextures :: proc(vp : ^Viewport)
 
 	    range := plot.highestValue - plot.lowestValue
 
-	    // Adjust label increment to avoid labels overlapping
-	    labelIncrement := plot.labelIncrement
-	    labelCount := i32(range / labelIncrement)
-    
-	    for labelCount * LABEL_FONT_SIZE > height
-	    {
-	        labelIncrement *= 2
-	        labelCount /= 2
-	    }
-    
-	    labelValue := plot.lowestValue - math.mod(plot.lowestValue, labelIncrement)
-
-	    if labelValue < plot.lowestValue
-	    {
-	        labelValue += labelIncrement
-	    }
-
 	    // Draw border
 		rl.ImageDrawRectangleLines(&image, {0, 0, f32(columnWidth * 336 + 2), f32(height)}, PLOT_BORDER_THICKNESS, rl.Color{255, 255, 255, 127})
 
