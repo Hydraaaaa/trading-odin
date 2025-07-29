@@ -177,8 +177,6 @@ main :: proc()
 			Viewport_Resize(&viewport, rl.Rectangle{0, 0, screenWidth, screenHeight})
 		}
 
-		Viewport_Update(&viewport, chart)
-		
 		// Check download thread
 		if chart.isDownloading
 		{
@@ -206,6 +204,8 @@ main :: proc()
 			}
 		}
 
+		Viewport_Update(&viewport, chart)
+		
 		if rl.IsKeyPressed(.X)
 		{
 			Profiler_PrintData(profilerData)
