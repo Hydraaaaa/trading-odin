@@ -52,7 +52,7 @@ Viewport_Draw_Sessions :: proc(vp : ^Viewport, chart : Chart)
 		asiaStart := Timestamp_ToPixelX(startTimestamp, vp.scaleData)
 		asiaLength := Timestamp_ToPixelX(1800 * 16, vp.scaleData)
 		londonStart := asiaStart + asiaLength
-		londonLength := Timestamp_ToPixelX(1800 * 16, vp.scaleData)
+		londonLength := Timestamp_ToPixelX(1800 * 17, vp.scaleData)
 		newYorkStart := Timestamp_ToPixelX(startTimestamp + 1800 * 27, vp.scaleData)
 		newYorkLength := Timestamp_ToPixelX(1800 * 13, vp.scaleData)
 
@@ -338,64 +338,120 @@ Viewport_Draw_Sidebar :: proc(vp : ^Viewport, chart : Chart)
 		rl.DrawTextEx(headerFont, "Selection Stats", rl.Vector2{PADDING, currentY}, HEADER_FONT_SIZE, 0, rl.WHITE); currentY += HEADER_FONT_SIZE
 
 		// Returns new currentY
-		DrawBoxPlot :: proc(currentY : f32, label : cstring, plot : HalfHourOfWeek_BoxPlot, texture : rl.Texture) -> f32
+		DrawHeatmap :: proc(currentY : f32, title : cstring, heatmap : HalfHourOfWeek_Heatmap, texture : rl.Texture, isLabelPercent : bool = false) -> f32
 		{
-			COLUMN_WIDTH :: 1
-			PLOT_HEIGHT :: 102
-			BORDER_WIDTH :: 1
-			
 			currentY := currentY
-			rl.DrawTextEx(labelFont, label, rl.Vector2{PADDING, currentY}, LABEL_FONT_SIZE, 0, rl.WHITE)
+			rl.DrawTextEx(labelFont, title, rl.Vector2{PADDING, currentY}, LABEL_FONT_SIZE, 0, rl.WHITE)
 			currentY += LABEL_FONT_SIZE
 			
-		    plotStartX : i32 = SIDEBAR_WIDTH - PADDING - PLOT_BORDER_THICKNESS * 2 - COLUMN_WIDTH * 336
-		    plotHeight : i32 = PLOT_HEIGHT - 2
+		    plotStartX : i32 = SIDEBAR_WIDTH - PADDING - PLOT_BORDER_THICKNESS * 2 - texture.width
 
-		    range := plot.highestValue - plot.lowestValue
+		    f64bucketSize := f64(heatmap.params.bucketSize)
+		    f64minValue := f64(heatmap.params.minValue)
+		    f64maxValue := f64(heatmap.params.maxValue)
+		    f64bucketCount := f64(heatmap.bucketCount)
+
+		    range := f64bucketSize * f64bucketCount
 
 		    // Adjust label increment to avoid labels overlapping
-		    labelIncrement := plot.labelIncrement
-		    labelCount := i32(range / labelIncrement)
-    
-		    for labelCount * LABEL_FONT_SIZE > PLOT_HEIGHT
-		    {
-		        labelIncrement *= 2
-		        labelCount /= 2
-		    }
-    
-		    labelValue := plot.lowestValue - math.mod(plot.lowestValue, labelIncrement)
+		    labelIncrement := f64bucketSize * (LABEL_FONT_SIZE - 5)
 
-		    if labelValue < plot.lowestValue
+		    // Round label increment to a nice number
+		    increments := [3]f64{0.25, 0.5, 1}
+		    incrementIndex := 0
+		    incrementMultiplier : f64 = 0.001
+
+		    for incrementMultiplier < labelIncrement
+		    {
+		    	incrementMultiplier *= 10
+		    }
+
+		    for increment in increments
+		    {
+		    	if labelIncrement < increment * incrementMultiplier
+		    	{
+		    		labelIncrement = increment * incrementMultiplier
+		    		break
+		    	}
+		    }
+
+		    labelCount := heatmap.bucketCount / int(labelIncrement / f64bucketSize)
+		    
+		    labelValue := f64minValue - math.mod(f64minValue, labelIncrement)
+
+		    if labelValue < f64minValue
 		    {
 		        labelValue += labelIncrement
 		    }
 
 		    // Draw labels
 		    textBuffer : [64]u8
-    
-		    for labelValue < plot.highestValue
+
+		    for labelValue < f64maxValue
 		    {
-		        labelHeight := i32((labelValue - plot.lowestValue) / range * PLOT_HEIGHT)
-		        fmt.bprintf(textBuffer[:], plot.labelFormat, labelValue)
+		        labelHeight := i32((labelValue - f64minValue) * f64bucketCount / range)
+		        
+		        if isLabelPercent
+		        {
+			        fmt.bprintf(textBuffer[:], "%.3g%%\x00", labelValue * 100)
+		        }
+		        else
+		        {
+			        fmt.bprintf(textBuffer[:], "%.5g\x00", labelValue)
+		        }
         
 		        labelWidth := rl.MeasureTextEx(labelFont, cstring(&textBuffer[0]), LABEL_FONT_SIZE, 0).x
-		        rl.DrawTextEx(labelFont, cstring(&textBuffer[0]), rl.Vector2{f32(plotStartX) - labelWidth - 5, currentY + 1 + f32(PLOT_HEIGHT - labelHeight - LABEL_FONT_SIZE / 2)}, LABEL_FONT_SIZE, 0, rl.WHITE)
+		        rl.DrawTextEx(labelFont, cstring(&textBuffer[0]), rl.Vector2{f32(plotStartX) - labelWidth - 5, currentY + 1 + f32(i32(heatmap.bucketCount) - labelHeight - LABEL_FONT_SIZE / 2)}, LABEL_FONT_SIZE, 0, rl.WHITE)
         
 		        labelValue += labelIncrement
 		    }
 
-			rl.DrawTexture(texture, plotStartX, i32(currentY + 1), rl.Color{255, 255, 255, 255})
+		    // Draw Heatmap
+		    texturePosX := plotStartX + PLOT_BORDER_THICKNESS
+		    texturePosY := currentY + 1
+			rl.DrawRectangleLinesEx({f32(plotStartX), currentY, f32(texture.width + PLOT_BORDER_THICKNESS * 2), f32(texture.height + PLOT_BORDER_THICKNESS * 2)}, 1, rl.Color{255, 255, 255, 127})
+		
+		    asiaColor := rl.RED
+		    asiaColor.a = 63
+		    londonColor := rl.YELLOW
+		    londonColor.a = 63
+		    newYorkColor := rl.BLUE
+		    newYorkColor.a = 63
+    
+		    columnWidth := texture.width / 336
+		    
+		    asiaStart := texturePosX
+		    londonStart := texturePosX + columnWidth * 16
+		    newYorkStart := texturePosX + columnWidth * 27
+
+		    asiaLength := columnWidth * 16
+		    londonLength := columnWidth * 17
+		    newYorkLength := columnWidth * 13
+
+			// Draw sessions
+		    for day in 0 ..< 7
+		    {
+		        rl.DrawRectangle(asiaStart, i32(texturePosY), asiaLength, texture.height, asiaColor)
+		        rl.DrawRectangle(londonStart, i32(texturePosY), londonLength, texture.height, londonColor)
+		        rl.DrawRectangle(newYorkStart, i32(texturePosY), newYorkLength, texture.height, newYorkColor)
+	        
+		        asiaStart += columnWidth * 48
+		        londonStart += columnWidth * 48
+		        newYorkStart += columnWidth * 48
+			}
 			
-			//HalfHourOfWeek_BoxPlot_Draw(plot, PADDING, i32(currentY + 1), SIDEBAR_WIDTH - PADDING * 2, 1, PLOT_HEIGHT)
-			currentY += PLOT_HEIGHT + 4
+			rl.BeginShaderMode(heatmapShader)
+			rl.DrawTexture(texture, texturePosX, i32(currentY + 1), rl.Color{255, 255, 255, 255})
+			rl.EndShaderMode()
+			
+			currentY += f32(heatmap.bucketCount) + 8
 			
 			return currentY
 		}
-
-		currentY = DrawBoxPlot(currentY, "Price Movement", vp.currentSelection.priceMovement, vp.priceMovementTexture)
-		currentY = DrawBoxPlot(currentY, "Price Movement (abs)", vp.currentSelection.priceMovementAbs, vp.priceMovementAbsTexture)
-		currentY = DrawBoxPlot(currentY, "Price Movement (percent)", vp.currentSelection.priceMovementPercent, vp.priceMovementPercentTexture)
-		currentY = DrawBoxPlot(currentY, "Price Movement (percent+abs)", vp.currentSelection.priceMovementPercentAbs, vp.priceMovementPercentAbsTexture)
+		
+		currentY = DrawHeatmap(currentY, "Price Movement", vp.currentSelection.priceMovement, vp.priceMovementTexture)
+		currentY = DrawHeatmap(currentY, "Price Movement (abs)", vp.currentSelection.priceMovementAbs, vp.priceMovementAbsTexture)
+		currentY = DrawHeatmap(currentY, "Price Movement (percent)", vp.currentSelection.priceMovementPercent, vp.priceMovementPercentTexture, true)
+		currentY = DrawHeatmap(currentY, "Price Movement (percent+abs)", vp.currentSelection.priceMovementPercentAbs, vp.priceMovementPercentAbsTexture, true)
 	}
-
 }

@@ -45,10 +45,11 @@ Selection :: struct
 	strategyResults : [dynamic]TradeResult,
 	strategyTargets : [dynamic]TradeTarget,
 	
-	priceMovement : HalfHourOfWeek_BoxPlot,
-	priceMovementAbs : HalfHourOfWeek_BoxPlot,
-	priceMovementPercent : HalfHourOfWeek_BoxPlot,
-	priceMovementPercentAbs : HalfHourOfWeek_BoxPlot,
+	priceMovement : HalfHourOfWeek_Heatmap,
+	priceMovementAbs : HalfHourOfWeek_Heatmap,
+	priceMovementPercent : HalfHourOfWeek_Heatmap,
+	priceMovementPercentAbs : HalfHourOfWeek_Heatmap,
+	range : HalfHourOfWeek_Heatmap,
 }
 
 TradeResult :: struct
@@ -468,26 +469,27 @@ Selection_Create :: proc(selection : ^Selection, chart : Chart, startTimestamp :
 
 	selection.draw618 = true
 
-	selection.priceMovement = HalfHourOfWeek_PriceMovement_Create(chart, startTimestamp, endTimestamp)
-	selection.priceMovementAbs = HalfHourOfWeek_PriceMovement_Create(chart, startTimestamp, endTimestamp, true)
-	selection.priceMovementPercent = HalfHourOfWeek_PriceMovement_Create(chart, startTimestamp, endTimestamp, false, true)
-	selection.priceMovementPercentAbs = HalfHourOfWeek_PriceMovement_Create(chart, startTimestamp, endTimestamp, true, true)
+	selection.priceMovement = HalfHourOfWeek_Heatmap_Create(chart, startTimestamp, endTimestamp, {proc(candle : Candle) -> f32 { return candle.close - candle.open}, 25, -1000, 1000})
+	selection.priceMovementAbs = HalfHourOfWeek_Heatmap_Create(chart, startTimestamp, endTimestamp, {proc(candle : Candle) -> f32 { return math.abs(candle.close - candle.open)}, 25, 0, 1000})
+	selection.priceMovementPercent = HalfHourOfWeek_Heatmap_Create(chart, startTimestamp, endTimestamp, {proc(candle : Candle) -> f32 { return (candle.close - candle.open) / candle.open}, 0.001, -0.02, 0.02})
+	selection.priceMovementPercentAbs = HalfHourOfWeek_Heatmap_Create(chart, startTimestamp, endTimestamp, {proc(candle : Candle) -> f32 { return math.abs(candle.close - candle.open) / candle.open}, 0.001, 0, 0.02})
+	selection.range = HalfHourOfWeek_Heatmap_Create(chart, startTimestamp, endTimestamp, {proc(candle : Candle) -> f32 { return math.abs(candle.close - candle.open) / candle.open}, 0.001, 0, 0.02})
 }
 
 Selection_Resize :: proc(selection : ^Selection, startTimestamp : i32, endTimestamp : i32, high : f32, low : f32, isUpsideDown : bool, chart : Chart)
 {
 	VolumeProfile_Resize(&selection.volumeProfile, selection.startTimestamp, selection.endTimestamp, startTimestamp, endTimestamp, chart)
 
+	HalfHourOfWeek_Heatmap_Resize(&selection.priceMovement, chart, selection.startTimestamp, selection.endTimestamp, startTimestamp, endTimestamp)
+	HalfHourOfWeek_Heatmap_Resize(&selection.priceMovementAbs, chart, selection.startTimestamp, selection.endTimestamp, startTimestamp, endTimestamp)
+	HalfHourOfWeek_Heatmap_Resize(&selection.priceMovementPercent, chart, selection.startTimestamp, selection.endTimestamp, startTimestamp, endTimestamp)
+	HalfHourOfWeek_Heatmap_Resize(&selection.priceMovementPercentAbs, chart, selection.startTimestamp, selection.endTimestamp, startTimestamp, endTimestamp)
+	
 	selection.startTimestamp = startTimestamp
 	selection.endTimestamp = endTimestamp
 	selection.high = high
 	selection.low = low
 	selection.isUpsideDown = isUpsideDown
-	
-	selection.priceMovement = HalfHourOfWeek_PriceMovement_Create(chart, startTimestamp, endTimestamp)
-	selection.priceMovementAbs = HalfHourOfWeek_PriceMovement_Create(chart, startTimestamp, endTimestamp, true)
-	selection.priceMovementPercent = HalfHourOfWeek_PriceMovement_Create(chart, startTimestamp, endTimestamp, false, true)
-	selection.priceMovementPercentAbs = HalfHourOfWeek_PriceMovement_Create(chart, startTimestamp, endTimestamp, true, true)
 }
 
 Selection_Draw :: proc(selection : Selection, cameraX : f32, cameraY : f32, scaleData : ScaleData)

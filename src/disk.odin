@@ -118,7 +118,7 @@ AppendDay :: proc(trades : ^[]Trade, chart : ^Chart)
 		firstTrade = trades[0]
 	}
 
-	fmt.println("Appending", len(trades), "trades")
+	fmt.println("Appending", len(trades), "trades to disk")
 
 	_, err = os.write(tradesFile, slice.to_bytes(trades[:])); assert(err == 0, "os.write error")
 

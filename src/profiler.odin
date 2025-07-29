@@ -102,7 +102,7 @@ Profiler_EndProfileWithName :: proc(sectionName : string, profilerData : ^Profil
         }
     }
 
-    fmt.println("End called for nonexistent profiler data:", sectionName)
+    fmt.eprintln("End called for nonexistent profiler data:", sectionName)
 }
 
 Profiler_PrintData :: proc(profilerData : ProfilerData)
@@ -199,5 +199,5 @@ Profiler_ExportCSV :: proc(sectionName : string, profilerData : ProfilerData)
         }
     }
 
-    fmt.println("Export called for nonexistent profiler data:", sectionName)
+    fmt.eprintln("Export called for nonexistent profiler data:", sectionName)
 }

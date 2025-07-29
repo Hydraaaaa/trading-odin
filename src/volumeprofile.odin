@@ -67,11 +67,7 @@ VolumeProfileBucket :: struct
 // Must be freed with VolumeProfile_Destroy
 VolumeProfile_Create :: proc(startTimestamp : i32, endTimestamp : i32, chart : Chart, bucketSize : f32 = 5) -> VolumeProfile
 {
-    if bucketSize <= 0
-    {
-        fmt.println("ERROR: VolumeProfile_Create called with invalid bucketSize")
-        return VolumeProfile{}
-    }
+    assert(bucketSize > 0, "VolumeProfile_Create called with invalid bucketSize")
 
     high, low := Chart_GetRangeHighAndLow(chart, startTimestamp, endTimestamp)
 

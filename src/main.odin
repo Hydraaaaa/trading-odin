@@ -32,6 +32,8 @@ labelHeight : f32
 volumeProfileIcon : rl.Texture2D
 fibRetracementIcon : rl.Texture2D
 
+heatmapShader : rl.Shader
+
 main :: proc()
 {
 	rl.SetConfigFlags({.WINDOW_RESIZABLE})
@@ -47,6 +49,8 @@ main :: proc()
 
 	volumeProfileIcon = rl.LoadTexture("assets/volumeProfileIcon.png"); defer rl.UnloadTexture(volumeProfileIcon)
 	fibRetracementIcon = rl.LoadTexture("assets/fibRetracementIcon.png"); defer rl.UnloadTexture(fibRetracementIcon)
+	
+	heatmapShader = rl.LoadShader(nil, "shaders/heatmap.fs"); defer rl.UnloadShader(heatmapShader)
 
 	screenWidth : f32 = INITIAL_SCREEN_WIDTH
 	screenHeight : f32 = INITIAL_SCREEN_HEIGHT

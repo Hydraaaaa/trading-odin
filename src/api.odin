@@ -25,7 +25,7 @@ DownloadDay :: proc(date : ^DayMonthYear, trades : ^[]Trade)
 	fmt.printfln("Downloading %2i/%2i/%i", date.day, date.month, date.year)
 	if apiError != nil
 	{
-		fmt.println("DownloadDay request failed:", apiError)
+		fmt.eprintln("DownloadDay request failed:", apiError)
 		return
 	}
 
@@ -35,14 +35,14 @@ DownloadDay :: proc(date : ^DayMonthYear, trades : ^[]Trade)
 
 	if responseBodyError != nil
 	{
-		fmt.println("DownloadDay error retrieving response body:", responseBodyError)
+		fmt.eprintln("DownloadDay error retrieving response body:", responseBodyError)
 		return
 	}
 
 	// 404 Not Found
 	if responseBody.(client.Body_Plain)[0] == '<'
 	{
-		fmt.println("DownloadDay: 404 Not Found")
+		fmt.eprintln("DownloadDay: 404 Not Found")
 		return
 	}
 

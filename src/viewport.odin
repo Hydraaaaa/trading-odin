@@ -4,6 +4,7 @@ import "core:fmt"
 import "core:math"
 import "core:slice"
 import rl "vendor:raylib"
+import rlgl "vendor:raylib/rlgl"
 
 SIDEBAR_WIDTH :: 400
 
@@ -1134,23 +1135,23 @@ Viewport_Draw :: proc(vp : ^Viewport, chart : Chart)
 	}
 
 	// Draw Highs/Lows
-	prevHighlow := vp.highlows005[0]
-	prevPosX := Timestamp_ToPixelX(vp.highlows005[0].timestamp, vp.scaleData)
+	// prevHighlow := vp.highlows005[0]
+	// prevPosX := Timestamp_ToPixelX(vp.highlows005[0].timestamp, vp.scaleData)
 
-	for highlow in vp.highlows005[1:]
-	{
-		posX := Timestamp_ToPixelX(highlow.timestamp, vp.scaleData)
+	// for highlow in vp.highlows005[1:]
+	// {
+	// 	posX := Timestamp_ToPixelX(highlow.timestamp, vp.scaleData)
 		
-		if posX > vp.camera.x && prevPosX < vp.camera.x + vp.rect.width
-		{
-			start := rl.Vector2{prevPosX - vp.camera.x, Price_ToPixelY(prevHighlow.price, vp.scaleData) - vp.camera.y}
-			end := rl.Vector2{posX - vp.camera.x, Price_ToPixelY(highlow.price, vp.scaleData) - vp.camera.y}
-			rl.DrawLineV(start, end, rl.WHITE)
-		}
+	// 	if posX > vp.camera.x && prevPosX < vp.camera.x + vp.rect.width
+	// 	{
+	// 		start := rl.Vector2{prevPosX - vp.camera.x, Price_ToPixelY(prevHighlow.price, vp.scaleData) - vp.camera.y}
+	// 		end := rl.Vector2{posX - vp.camera.x, Price_ToPixelY(highlow.price, vp.scaleData) - vp.camera.y}
+	// 		rl.DrawLineV(start, end, rl.WHITE)
+	// 	}
 
-		prevHighlow = highlow
-		prevPosX = posX
-	}
+	// 	prevHighlow = highlow
+	// 	prevPosX = posX
+	// }
 
 	if .DRAW_CVD in vp.flags do Viewport_Draw_CVD(vp, chart)
 	if .DRAW_PREV_DAY_VPS in vp.flags do Viewport_Draw_PDVPs(vp, chart)
@@ -1432,7 +1433,6 @@ Viewport_UpdateTimeframe :: proc(vp : ^Viewport, chart : Chart)
 
 Viewport_UpdateSidebarTextures :: proc(vp : ^Viewport)
 {
-	GRAPH_HEIGHT :: 102
 	COLUMN_WIDTH :: 1
 
 	if rl.IsTextureValid(vp.priceMovementTexture)
@@ -1443,75 +1443,124 @@ Viewport_UpdateSidebarTextures :: proc(vp : ^Viewport)
 		rl.UnloadTexture(vp.priceMovementPercentAbsTexture)
 	}
 	
-	vp.priceMovementTexture = CreateTexture(vp.currentSelection.priceMovement, COLUMN_WIDTH, GRAPH_HEIGHT)
-	vp.priceMovementAbsTexture = CreateTexture(vp.currentSelection.priceMovementAbs, COLUMN_WIDTH, GRAPH_HEIGHT)
-	vp.priceMovementPercentTexture = CreateTexture(vp.currentSelection.priceMovementPercent, COLUMN_WIDTH, GRAPH_HEIGHT)
-	vp.priceMovementPercentAbsTexture = CreateTexture(vp.currentSelection.priceMovementPercentAbs, COLUMN_WIDTH, GRAPH_HEIGHT)
+	vp.priceMovementTexture = CreateValueAreaTexture(vp.currentSelection.priceMovement, COLUMN_WIDTH)
+	vp.priceMovementAbsTexture = CreateValueAreaTexture(vp.currentSelection.priceMovementAbs, COLUMN_WIDTH)
+	vp.priceMovementPercentTexture = CreateValueAreaTexture(vp.currentSelection.priceMovementPercent, COLUMN_WIDTH)
+	vp.priceMovementPercentAbsTexture = CreateValueAreaTexture(vp.currentSelection.priceMovementPercentAbs, COLUMN_WIDTH)
 	
-	CreateTexture :: proc(plot : HalfHourOfWeek_BoxPlot, columnWidth : i32, height : i32) -> rl.Texture
+	CreateHeatmapTexture :: proc(heatmap : HalfHourOfWeek_Heatmap, columnWidth : i32) -> rl.Texture
 	{
-		image := rl.GenImageColor(columnWidth * 336 + 2, height, rl.Color{0, 0, 0, 0})
+		plotWidth := 336 * columnWidth
+		plotHeight := i32(heatmap.bucketCount)
+		
+	    pixelData := make([]u8, 336 * plotHeight); defer delete(pixelData)
 
-	    boxPlotStartX : i32 = PLOT_BORDER_THICKNESS
-	    boxPlotHeight : i32 = height - PLOT_BORDER_THICKNESS * 2
+		for x in 0 ..< i32(336)
+		{
+			heatmapColumn : []i32 = heatmap.buckets[x * plotHeight:(x+1 * plotHeight)]
+			
+			for y in 0 ..< i32(plotHeight)
+			{
+				textureIndex := x + (plotHeight - y - 1) * i32(336)
 
-	    asiaColor := rl.RED
-	    asiaColor.a = 63
-	    londonColor := rl.YELLOW
-	    londonColor.a = 63
-	    newYorkColor := rl.BLUE
-	    newYorkColor.a = 63
-    
-	    asiaStart := boxPlotStartX
-	    londonStart := boxPlotStartX + columnWidth * 16
-	    newYorkStart := boxPlotStartX + columnWidth * 27
-
-	    asiaLength := columnWidth * 16
-	    londonLength := columnWidth * 17
-	    newYorkLength := columnWidth * 13
-
-	    range := plot.highestValue - plot.lowestValue
-
-	    // Draw border
-		rl.ImageDrawRectangleLines(&image, {0, 0, f32(columnWidth * 336 + 2), f32(height)}, PLOT_BORDER_THICKNESS, rl.Color{255, 255, 255, 127})
-
-		// Draw sessions + bars
-	    for day in 0 ..< 7
-	    {
-	        rl.ImageDrawRectangle(&image, asiaStart, PLOT_BORDER_THICKNESS, asiaLength, i32(boxPlotHeight), asiaColor)
-	        rl.ImageDrawRectangle(&image, londonStart, PLOT_BORDER_THICKNESS, londonLength, i32(boxPlotHeight), londonColor)
-	        rl.ImageDrawRectangle(&image, newYorkStart, PLOT_BORDER_THICKNESS, newYorkLength, i32(boxPlotHeight), newYorkColor)
-
-	        // Separating rectangle draw from line draws due to performance effects
-	        for data, i in plot.data
-	        {
-	            Q3Y := PLOT_BORDER_THICKNESS + i32((1 - ((data.Q3 - plot.lowestValue) / range)) * f32(boxPlotHeight))
-	            Q1Y := PLOT_BORDER_THICKNESS + i32((1 - ((data.Q1 - plot.lowestValue) / range)) * f32(boxPlotHeight))
-
-	            columnPosX := boxPlotStartX + i32(i) * columnWidth
-
-	            rl.ImageDrawRectangle(&image, columnPosX, Q3Y, columnWidth, Q1Y - Q3Y, rl.WHITE)
-	        }
-        
-	        for data, i in plot.data
-	        {
-	            medianY := PLOT_BORDER_THICKNESS + i32((1 - ((data.median - plot.lowestValue) / range)) * f32(boxPlotHeight))
-	            meanY := PLOT_BORDER_THICKNESS + i32((1 - ((data.mean - plot.lowestValue) / range)) * f32(boxPlotHeight))
-
-	            columnPosX := boxPlotStartX + i32(i) * columnWidth
-
-	            rl.ImageDrawLine(&image, columnPosX, medianY, columnPosX + columnWidth, medianY, rl.BLUE)
-	            rl.ImageDrawLine(&image, columnPosX, meanY, columnPosX + columnWidth, meanY, rl.RED)
-	        }
-        
-	        asiaStart += columnWidth * 48
-	        londonStart += columnWidth * 48
-	        newYorkStart += columnWidth * 48
+				value := u8(heatmapColumn[y] * 255 / heatmap.biggestBucket)
+				
+				pixelData[textureIndex] = value
+			}
 		}
 
-		texture := rl.LoadTextureFromImage(image)
-		rl.UnloadImage(image)
+		image := rl.Image {
+			data = raw_data(pixelData),
+			width = 336,
+			height = plotHeight,
+			format = .UNCOMPRESSED_GRAYSCALE,
+			mipmaps = 1
+		}
 
-		return texture
+		return rl.LoadTextureFromImage(image)
+	}
+
+	CreateValueAreaTexture :: proc(heatmap : HalfHourOfWeek_Heatmap, columnWidth : i32) -> rl.Texture
+	{
+		plotWidth := 336 * columnWidth
+		plotHeight := i32(heatmap.bucketCount)
+		
+	    pixelData := make([]u8, 336 * plotHeight); defer delete(pixelData)
+	    
+		for x in 0 ..< i32(336)
+		{
+			heatmapColumn : []i32 = heatmap.buckets[x * plotHeight:(x+1) * plotHeight]
+			
+		    // Calculate Value Area
+		    // Find the smallest area with total samples no less than the required number
+		    startIndex := 0
+		    numBuckets := 1
+		    requiredSamples := i32(math.ceil(f32(heatmap.totalSamples[x]) * 0.682))
+		    currentSamples := heatmapColumn[0]
+
+		    // Determine the initial area size (number of buckets needed to reach the required samples starting from index 0)
+		    for currentSamples < requiredSamples
+		    {
+		        currentSamples += heatmapColumn[numBuckets]
+		        numBuckets += 1
+		    }
+
+		    newSamples := currentSamples - heatmapColumn[0]
+		    newStartIndex := startIndex + 1
+		    newNumBuckets := numBuckets
+
+		    // Loop through the profile, incrementing the starting index
+		    // Shrink the area whenever a smaller area still has the required samples
+		    for newStartIndex + newNumBuckets < len(heatmapColumn)
+		    {
+		        newSamples += heatmapColumn[newStartIndex + newNumBuckets]
+
+		        if newSamples > currentSamples
+		        {
+		            currentSamples = newSamples
+		            startIndex = newStartIndex
+		        }
+
+		        smallerAreaSamples := newSamples - heatmapColumn[newStartIndex]
+		        smallerAreaStartIndex := newStartIndex + 1
+		        smallerAreaNumBuckets := newNumBuckets - 1
+
+		        for smallerAreaSamples > requiredSamples &&
+		            smallerAreaNumBuckets > 0
+		        {
+		            currentSamples = smallerAreaSamples
+		            newSamples = smallerAreaSamples
+		            startIndex = smallerAreaStartIndex
+		            newStartIndex = smallerAreaStartIndex
+		            numBuckets = smallerAreaNumBuckets
+		            newNumBuckets = smallerAreaNumBuckets
+
+		            smallerAreaSamples -= heatmapColumn[smallerAreaStartIndex]
+		            smallerAreaStartIndex += 1
+		            smallerAreaNumBuckets -= 1
+		        }
+
+		        newSamples -= heatmapColumn[newStartIndex]
+		        newStartIndex += 1
+		    }
+		    
+		    // Draw the value area into the texture
+			for y in startIndex ..< startIndex + numBuckets
+			{
+				textureIndex := x + (plotHeight - i32(y) - 1) * i32(336)
+
+				pixelData[textureIndex] = 255
+			}
+		}
+
+		image := rl.Image {
+			data = raw_data(pixelData),
+			width = 336,
+			height = plotHeight,
+			format = .UNCOMPRESSED_GRAYSCALE,
+			mipmaps = 1
+		}
+
+		return rl.LoadTextureFromImage(image)
 	}
 }
