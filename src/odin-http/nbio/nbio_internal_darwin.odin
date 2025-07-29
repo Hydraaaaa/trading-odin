@@ -8,13 +8,13 @@ import "core:mem"
 import "core:net"
 import "core:os"
 import "core:time"
-
-import kqueue "_kqueue"
+import "core:sys/posix"
+import "core:sys/kqueue"
 
 MAX_EVENTS :: 256
 
 _IO :: struct {
-	kq:              os.Handle,
+	kq:              posix.FD,
 	io_inflight:     int,
 	completion_pool: Pool(Completion),
 	timeouts:        [dynamic]^Completion,
@@ -117,19 +117,19 @@ flush :: proc(io: ^IO) -> os.Errno {
 		}
 
 		max_timeout := time.Millisecond * 10
-		ts: kqueue.Time_Spec
-		ts.nsec = min(min_timeout.? or_else i64(max_timeout), i64(max_timeout))
+		ts: posix.timespec
+		ts.tv_nsec = min(min_timeout.? or_else i64(max_timeout), i64(max_timeout))
 		new_events, err := kqueue.kevent(io.kq, events[:change_events], events[:], &ts)
-		if err != .None do return ev_err_to_os_err(err)
+		if err != nil { return ev_err_to_os_err(err) }
 
 		// PERF: this is ordered and O(N), can this be made unordered?
 		remove_range(&io.io_pending, 0, change_events)
 
 		io.io_inflight += change_events
-		io.io_inflight -= new_events
+		io.io_inflight -= int(new_events)
 
 		if new_events > 0 {
-			queue.reserve(&io.completed, new_events)
+			queue.reserve(&io.completed, int(new_events))
 			for event in events[:new_events] {
 				completion := cast(^Completion)event.udata
 				queue.push_back(&io.completed, completion)
@@ -171,33 +171,33 @@ flush_io :: proc(io: ^IO, events: []kqueue.KEvent) -> int {
 		switch op in completion.operation {
 		case Op_Accept:
 			event.ident = uintptr(op.sock)
-			event.filter = kqueue.EVFILT_READ
+			event.filter = .Read
 		case Op_Connect:
 			event.ident = uintptr(op.socket)
-			event.filter = kqueue.EVFILT_WRITE
+			event.filter = .Write
 		case Op_Read:
 			event.ident = uintptr(op.fd)
-			event.filter = kqueue.EVFILT_READ
+			event.filter = .Read
 		case Op_Write:
 			event.ident = uintptr(op.fd)
-			event.filter = kqueue.EVFILT_WRITE
+			event.filter = .Read
 		case Op_Recv:
 			event.ident = uintptr(os.Socket(net.any_socket_to_socket(op.socket)))
-			event.filter = kqueue.EVFILT_READ
+			event.filter = .Read
 		case Op_Send:
 			event.ident = uintptr(os.Socket(net.any_socket_to_socket(op.socket)))
-			event.filter = kqueue.EVFILT_WRITE
+			event.filter = .Write
 		case Op_Poll:
 			event.ident = uintptr(op.fd)
 			switch op.event {
-			case .Read:  event.filter = kqueue.EVFILT_READ
-			case .Write: event.filter = kqueue.EVFILT_WRITE
+			case .Read:  event.filter = .Read
+			case .Write: event.filter = .Write
 			case:        unreachable()
 			}
 
-			event.flags = kqueue.EV_ADD | kqueue.EV_ENABLE
+			event.flags = {.Add, .Enable}
 			if !op.multi {
-				event.flags |= kqueue.EV_ONESHOT
+				event.flags += {.One_Shot}
 			}
 
 			event.udata = completion
@@ -206,12 +206,12 @@ flush_io :: proc(io: ^IO, events: []kqueue.KEvent) -> int {
 		case Op_Poll_Remove:
 			event.ident = uintptr(op.fd)
 			switch op.event {
-			case .Read:  event.filter = kqueue.EVFILT_READ
-			case .Write: event.filter = kqueue.EVFILT_WRITE
+			case .Read:  event.filter = .Read
+			case .Write: event.filter = .Write
 			case:        unreachable()
 			}
 
-			event.flags = kqueue.EV_DELETE | kqueue.EV_DISABLE | kqueue.EV_ONESHOT
+			event.flags = {.Delete, .Disable, .One_Shot}
 
 			event.udata = completion
 
@@ -220,7 +220,7 @@ flush_io :: proc(io: ^IO, events: []kqueue.KEvent) -> int {
 			panic("invalid completion operation queued")
 		}
 
-		event.flags = kqueue.EV_ADD | kqueue.EV_ENABLE | kqueue.EV_ONESHOT
+		event.flags = {.Add, .Enable, .One_Shot}
 		event.udata = completion
 	}
 
@@ -260,10 +260,13 @@ flush_timeouts :: proc(io: ^IO) -> (min_timeout: Maybe(i64)) {
 }
 
 do_accept :: proc(io: ^IO, completion: ^Completion, op: ^Op_Accept) {
-	client, source, err := net.accept_tcp(op.sock)
-	if err == net.Accept_Error.Would_Block {
+	err: net.Network_Error
+	client, source, accept_err := net.accept_tcp(op.sock)
+	if accept_err == .Would_Block {
 		append(&io.io_pending, completion)
 		return
+	} else if accept_err != nil {
+		err = accept_err
 	}
 
 	if err == nil {
@@ -305,7 +308,7 @@ do_connect :: proc(io: ^IO, completion: ^Completion, op: ^Op_Connect) {
 
 	if err != os.ERROR_NONE {
 		net.close(op.socket)
-		op.callback(completion.user_data, {}, net.Dial_Error(err.(os.Platform_Error)))
+		op.callback(completion.user_data, {}, net._dial_error())
 	} else {
 		op.callback(completion.user_data, op.socket, nil)
 	}
@@ -359,16 +362,14 @@ do_recv :: proc(io: ^IO, completion: ^Completion, op: ^Op_Recv) {
 	case net.TCP_Socket:
 		received, err = net.recv_tcp(sock, op.buf)
 
-		// NOTE: Timeout is the name for EWOULDBLOCK in net package.
-		if err == net.TCP_Recv_Error.Timeout {
+		if err == net.TCP_Recv_Error.Would_Block {
 			append(&io.io_pending, completion)
 			return
 		}
 	case net.UDP_Socket:
 		received, remote_endpoint, err = net.recv_udp(sock, op.buf)
 
-		// NOTE: Timeout is the name for EWOULDBLOCK in net package.
-		if err == net.UDP_Recv_Error.Timeout {
+		if err == net.UDP_Recv_Error.Would_Block {
 			append(&io.io_pending, completion)
 			return
 		}
@@ -401,14 +402,14 @@ do_send :: proc(io: ^IO, completion: ^Completion, op: ^Op_Send) {
 	case net.TCP_Socket:
 		sent, errno = os.send(os.Socket(sock), op.buf, 0)
 		if errno != nil {
-			err = net.TCP_Send_Error(errno.(os.Platform_Error))
+			err = net._tcp_send_error()
 		}
 
 	case net.UDP_Socket:
 		toaddr := _endpoint_to_sockaddr(op.endpoint.(net.Endpoint))
 		sent, errno = os.sendto(os.Socket(sock), op.buf, 0, cast(^os.SOCKADDR)&toaddr, i32(toaddr.len))
 		if errno != nil {
-			err = net.UDP_Send_Error(errno.(os.Platform_Error))
+			err = net._udp_send_error()
 		}
 	}
 
@@ -496,48 +497,12 @@ do_next_tick :: proc(io: ^IO, completion: ^Completion, op: ^Op_Next_Tick) {
 	pool_put(&io.completion_pool, completion)
 }
 
-kq_err_to_os_err :: proc(err: kqueue.Queue_Error) -> os.Errno {
-	switch err {
-	case .Out_Of_Memory:
-		return os.ENOMEM
-	case .Descriptor_Table_Full:
-		return os.EMFILE
-	case .File_Table_Full:
-		return os.ENFILE
-	case .Unknown:
-		return os.EFAULT
-	case .None:
-		fallthrough
-	case:
-		return os.ERROR_NONE
-	}
+kq_err_to_os_err :: proc(err: posix.Errno) -> os.Errno {
+	return os.Platform_Error(err)
 }
 
-ev_err_to_os_err :: proc(err: kqueue.Event_Error) -> os.Errno {
-	switch err {
-	case .Access_Denied:
-		return os.EACCES
-	case .Invalid_Event:
-		return os.EFAULT
-	case .Invalid_Descriptor:
-		return os.EBADF
-	case .Signal:
-		return os.EINTR
-	case .Invalid_Timeout_Or_Filter:
-		return os.EINVAL
-	case .Event_Not_Found:
-		return os.ENOENT
-	case .Out_Of_Memory:
-		return os.ENOMEM
-	case .Process_Not_Found:
-		return os.ESRCH
-	case .Unknown:
-		return os.EFAULT
-	case .None:
-		fallthrough
-	case:
-		return os.ERROR_NONE
-	}
+ev_err_to_os_err :: proc(err: posix.Errno) -> os.Errno {
+	return os.Platform_Error(err)
 }
 
 // Private proc in net package, verbatim copy.

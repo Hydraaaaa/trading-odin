@@ -4,13 +4,13 @@ import "core:container/queue"
 import "core:net"
 import "core:os"
 import "core:time"
-
-import kqueue "_kqueue"
+import "core:sys/kqueue"
+import "core:sys/posix"
 
 _init :: proc(io: ^IO, allocator := context.allocator) -> (err: os.Errno) {
-	qerr: kqueue.Queue_Error
+	qerr: posix.Errno
 	io.kq, qerr = kqueue.kqueue()
-	if qerr != .None do return kq_err_to_os_err(qerr)
+	if qerr != nil { return kq_err_to_os_err(qerr) }
 
 	pool_init(&io.completion_pool, allocator = allocator)
 
@@ -35,7 +35,7 @@ _destroy :: proc(io: ^IO) {
 
 	queue.destroy(&io.completed)
 
-	os.close(io.kq)
+	posix.close(io.kq)
 
 	pool_destroy(&io.completion_pool)
 }
@@ -47,7 +47,7 @@ _tick :: proc(io: ^IO) -> os.Errno {
 _listen :: proc(socket: net.TCP_Socket, backlog := 1000) -> net.Network_Error {
 	errno := os.listen(os.Socket(socket), backlog)
 	if errno != nil {
-		return net.Listen_Error(errno.(os.Platform_Error))
+		return net._listen_error()
 	}
 	return nil
 }
@@ -101,9 +101,9 @@ _connect :: proc(io: ^IO, endpoint: net.Endpoint, user: rawptr, callback: On_Con
 		return nil, err
 	}
 
-	if err = _prepare_socket(sock); err != nil {
+	if prep_err := _prepare_socket(sock); prep_err != nil {
 		close(io, net.any_socket_to_socket(sock))
-		return nil, err
+		return nil, prep_err
 	}
 
 	completion := pool_get(&io.completion_pool)
