@@ -13,4 +13,6 @@ The current notable features are:
 - Zooming between timeframes ![Zooming](zoom.gif)
 - Per-trade volume profiles with performance capable of realtime updates at over 60fps, significantly outperforming TradingView in speed and granularity ![Volume Profile](volumeprofile.gif)
 
+The program's functionality is largely centred around the concept of a selection. Selections can be created by holding shift and dragging the mouse. By default, these act as rulers, but additional tools are then accessible from a floating menu (currently only the Volume Profile of note).
+
 Written in Odin! https://odin-lang.org/
