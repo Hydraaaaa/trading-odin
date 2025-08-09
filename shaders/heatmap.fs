@@ -7,6 +7,8 @@ uniform sampler2D texture0; // Grayscale input texture
 
 void main()
 {
-    float grayscale = texture(texture0, fragTexCoord).r; // Read grayscale value
-    fragColor = vec4(1.0, 1.0, 1.0, grayscale); // Set alpha to grayscale value
+    float opacity = texture(texture0, fragTexCoord).r; // Read grayscale value
+    float gb = 1.0 - step(1.0, opacity); // If grayscale is 1.0, green and blue will be 0
+
+    fragColor = vec4(1.0, gb, gb, opacity);
 }

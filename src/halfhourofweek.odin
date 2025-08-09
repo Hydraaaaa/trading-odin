@@ -20,7 +20,7 @@ HalfHourOfWeek_Heatmap :: struct
     biggestBucket : i32,
     biggestBuckets : [336]i32,
     means : [336]f32,
-    medians : [336]int, // Should I even have this? It won't be precise
+    midpoints : [336]int, // Should I even have this? It won't be precise
 }
 
 HeatmapParameters :: struct
@@ -125,22 +125,22 @@ HalfHourOfWeek_Heatmap_CalculateMetadata :: proc(heatmap : ^HalfHourOfWeek_Heatm
         heatmap.totalSamples[colIndex] = totalSamples
         heatmap.means[colIndex] = totalValue / f32(totalSamples)
 
-        totalSamples /= 2
-        medianIndex := 0
+        totalSamples = i32(math.ceil(f32(totalSamples) / 2))
+        midpointIndex := 0
         
-        for medianIndex < heatmap.bucketCount
+        for midpointIndex < heatmap.bucketCount
         {
-            totalSamples -= heatmap.buckets[medianIndex]
+            totalSamples -= column[midpointIndex]
 
             if totalSamples <= 0
             {
                 break
             }
 
-            medianIndex += 1
+            midpointIndex += 1
         }
 
-        heatmap.medians[colIndex] = medianIndex
+        heatmap.midpoints[colIndex] = midpointIndex
     }
 }
 
